@@ -8,125 +8,190 @@ datasource db {
 }
 
 model User {
-  id          String   @id @default(uuid()) @db.Uuid
-  authSubject String   @unique @map("auth_subject") @db.VarChar(191)
-  status      String   @default("active") @db.VarChar(24)
-  locale      String   @default("vi-VN") @db.VarChar(16)
-  timezone    String   @default("Asia/Ho_Chi_Minh") @db.VarChar(64)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-  cookSessions CookSession[]
+  id            String         @id @default(uuid()) @db.Uuid
+  authSubject   String         @unique @map("auth_subject") @db.VarChar(191)
+  status        String         @default("active") @db.VarChar(24)
+  locale        String         @default("vi-VN") @db.VarChar(16)
+  timezone      String         @default("Asia/Ho_Chi_Minh") @db.VarChar(64)
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  cookSessions  CookSession[]
   tasteProfiles TasteProfile[]
+
   @@map("users")
 }
 
 model Recipe {
-  id             String   @id @default(uuid()) @db.Uuid
-  slug           String   @unique @db.VarChar(180)
-  canonicalTitle String   @map("canonical_title") @db.VarChar(180)
-  status         String   @default("draft") @db.VarChar(24)
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id             String          @id @default(uuid()) @db.Uuid
+  slug           String          @unique @db.VarChar(180)
+  canonicalTitle String          @map("canonical_title") @db.VarChar(180)
+  status         String          @default("draft") @db.VarChar(24)
+  cuisine        String          @default("vietnamese") @db.VarChar(64)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
   versions       RecipeVersion[]
+
+  @@index([status, canonicalTitle])
   @@map("recipes")
 }
 
 model RecipeVersion {
-  id          String   @id @default(uuid()) @db.Uuid
-  recipeId    String   @map("recipe_id") @db.Uuid
-  versionNo   Int      @map("version_no")
-  servings    Decimal  @db.Decimal(6,2)
-  contentHash String   @map("content_hash") @db.VarChar(64)
-  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
-  recipe      Recipe   @relation(fields:[recipeId], references:[id])
+  id              String    @id @default(uuid()) @db.Uuid
+  recipeId        String    @map("recipe_id") @db.Uuid
+  versionNo       Int       @map("version_no")
+  servings        Decimal   @db.Decimal(6, 2)
+  prepTimeMinutes Int?      @map("prep_time_minutes")
+  cookTimeMinutes Int?      @map("cook_time_minutes")
+  summary         String?
+  contentHash     String    @map("content_hash") @db.VarChar(64)
+  publishedAt     DateTime? @map("published_at") @db.Timestamptz(6)
+
+  recipe       Recipe             @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredients  RecipeIngredient[]
+  steps        RecipeStep[]
   cookSessions CookSession[]
+
   @@unique([recipeId, versionNo])
+  @@index([recipeId, publishedAt])
   @@map("recipe_versions")
 }
 
 model CookSession {
-  id              String   @id @default(uuid()) @db.Uuid
-  userId          String   @map("user_id") @db.Uuid
-  recipeVersionId String   @map("recipe_version_id") @db.Uuid
-  status          String   @default("started") @db.VarChar(24)
-  servings        Decimal  @db.Decimal(6,2)
-  syncVersion     Int      @default(1) @map("sync_version")
-  startedAt       DateTime @default(now()) @map("started_at") @db.Timestamptz(6)
-  completedAt     DateTime? @map("completed_at") @db.Timestamptz(6)
-  user            User @relation(fields:[userId],references:[id])
-  recipeVersion   RecipeVersion @relation(fields:[recipeVersionId],references:[id])
+  id              String        @id @default(uuid()) @db.Uuid
+  userId          String        @map("user_id") @db.Uuid
+  recipeVersionId String        @map("recipe_version_id") @db.Uuid
+  status          String        @default("started") @db.VarChar(24)
+  servings        Decimal       @db.Decimal(6, 2)
+  syncVersion     Int           @default(1) @map("sync_version")
+  startedAt       DateTime      @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt     DateTime?     @map("completed_at") @db.Timestamptz(6)
+  user            User          @relation(fields: [userId], references: [id])
+  recipeVersion   RecipeVersion @relation(fields: [recipeVersionId], references: [id])
   feedback        CookFeedback?
   events          CookEvent[]
+
   @@index([userId, startedAt])
   @@map("cook_sessions")
 }
 
 model CookEvent {
-  id            String   @id @db.Uuid
-  cookSessionId String   @map("cook_session_id") @db.Uuid
-  eventType     String   @map("event_type") @db.VarChar(64)
-  clientSeq     Int      @map("client_seq")
-  clientTime    DateTime @map("client_time") @db.Timestamptz(6)
-  serverTime    DateTime @default(now()) @map("server_time") @db.Timestamptz(6)
+  id            String      @id @db.Uuid
+  cookSessionId String      @map("cook_session_id") @db.Uuid
+  eventType     String      @map("event_type") @db.VarChar(64)
+  clientSeq     Int         @map("client_seq")
+  clientTime    DateTime    @map("client_time") @db.Timestamptz(6)
+  serverTime    DateTime    @default(now()) @map("server_time") @db.Timestamptz(6)
   payload       Json
-  schemaVersion Int      @default(1) @map("schema_version")
-  cookSession   CookSession @relation(fields:[cookSessionId],references:[id])
+  schemaVersion Int         @default(1) @map("schema_version")
+  cookSession   CookSession @relation(fields: [cookSessionId], references: [id])
+
   @@unique([cookSessionId, clientSeq])
   @@map("cook_events")
 }
 
 model CookFeedback {
-  id             String   @id @default(uuid()) @db.Uuid
-  cookSessionId  String   @unique @map("cook_session_id") @db.Uuid
-  overallScore   Decimal? @map("overall_score") @db.Decimal(3,1)
-  dimensionJson  Json     @map("dimension_json")
-  technicalFlags Json     @map("technical_flags")
-  privateNote    String?  @map("private_note")
-  revisionNo     Int      @default(1) @map("revision_no")
-  submittedAt    DateTime @default(now()) @map("submitted_at") @db.Timestamptz(6)
-  cookSession    CookSession @relation(fields:[cookSessionId],references:[id])
+  id             String      @id @default(uuid()) @db.Uuid
+  cookSessionId  String      @unique @map("cook_session_id") @db.Uuid
+  overallScore   Decimal?    @map("overall_score") @db.Decimal(3, 1)
+  dimensionJson  Json        @map("dimension_json")
+  technicalFlags Json        @map("technical_flags")
+  privateNote    String?     @map("private_note")
+  revisionNo     Int         @default(1) @map("revision_no")
+  submittedAt    DateTime    @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  cookSession    CookSession @relation(fields: [cookSessionId], references: [id])
+
   @@map("cook_feedback")
 }
 
 model TasteProfile {
-  id               String   @id @default(uuid()) @db.Uuid
-  userId           String   @map("user_id") @db.Uuid
-  algorithmVersion String   @map("algorithm_version") @db.VarChar(32)
-  maturityScore    Decimal  @default(0) @map("maturity_score") @db.Decimal(5,4)
-  sampleCount      Int      @default(0) @map("sample_count")
-  computedAt       DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
-  user             User @relation(fields:[userId],references:[id])
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String           @map("user_id") @db.Uuid
+  algorithmVersion String           @map("algorithm_version") @db.VarChar(32)
+  maturityScore    Decimal          @default(0) @map("maturity_score") @db.Decimal(5, 4)
+  sampleCount      Int              @default(0) @map("sample_count")
+  computedAt       DateTime         @default(now()) @map("computed_at") @db.Timestamptz(6)
+  user             User             @relation(fields: [userId], references: [id])
   dimensions       TasteDimension[]
   signals          TasteSignal[]
+
   @@index([userId])
   @@map("taste_profiles")
 }
 
 model TasteDimension {
-  tasteProfileId String  @map("taste_profile_id") @db.Uuid
-  dimensionKey   String  @map("dimension_key") @db.VarChar(64)
-  scopeType      String  @default("global") @map("scope_type") @db.VarChar(24)
-  scopeId        String  @default("") @map("scope_id") @db.VarChar(191)
-  score          Decimal @default(0) @db.Decimal(6,5)
-  confidence     Decimal @default(0) @db.Decimal(5,4)
-  effectiveWeight Decimal @default(0) @map("effective_weight") @db.Decimal(10,4)
-  sampleCount    Int     @default(0) @map("sample_count")
-  manualOverride Decimal? @map("manual_override") @db.Decimal(6,5)
-  tasteProfile TasteProfile @relation(fields:[tasteProfileId],references:[id])
-  @@id([tasteProfileId,dimensionKey,scopeType,scopeId])
+  tasteProfileId  String       @map("taste_profile_id") @db.Uuid
+  dimensionKey    String       @map("dimension_key") @db.VarChar(64)
+  scopeType       String       @default("global") @map("scope_type") @db.VarChar(24)
+  scopeId         String       @default("") @map("scope_id") @db.VarChar(191)
+  score           Decimal      @default(0) @db.Decimal(6, 5)
+  confidence      Decimal      @default(0) @db.Decimal(5, 4)
+  effectiveWeight Decimal      @default(0) @map("effective_weight") @db.Decimal(10, 4)
+  sampleCount     Int          @default(0) @map("sample_count")
+  manualOverride  Decimal?     @map("manual_override") @db.Decimal(6, 5)
+  tasteProfile    TasteProfile @relation(fields: [tasteProfileId], references: [id])
+
+  @@id([tasteProfileId, dimensionKey, scopeType, scopeId])
   @@map("taste_dimensions")
 }
 
 model TasteSignal {
-  id             String   @id @default(uuid()) @db.Uuid
-  tasteProfileId String   @map("taste_profile_id") @db.Uuid
-  dimensionKey   String   @map("dimension_key") @db.VarChar(64)
-  signalValue    Decimal  @map("signal_value") @db.Decimal(6,5)
-  sourceType     String   @map("source_type") @db.VarChar(32)
-  baseWeight     Decimal  @map("base_weight") @db.Decimal(7,4)
-  qualityFactor  Decimal  @map("quality_factor") @db.Decimal(6,5)
-  excludedReason String?  @map("excluded_reason") @db.VarChar(120)
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  tasteProfile TasteProfile @relation(fields:[tasteProfileId],references:[id])
-  @@index([tasteProfileId,dimensionKey,createdAt])
+  id             String       @id @default(uuid()) @db.Uuid
+  tasteProfileId String       @map("taste_profile_id") @db.Uuid
+  dimensionKey   String       @map("dimension_key") @db.VarChar(64)
+  signalValue    Decimal      @map("signal_value") @db.Decimal(6, 5)
+  sourceType     String       @map("source_type") @db.VarChar(32)
+  baseWeight     Decimal      @map("base_weight") @db.Decimal(7, 4)
+  qualityFactor  Decimal      @map("quality_factor") @db.Decimal(6, 5)
+  excludedReason String?      @map("excluded_reason") @db.VarChar(120)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  tasteProfile   TasteProfile @relation(fields: [tasteProfileId], references: [id])
+
+  @@index([tasteProfileId, dimensionKey, createdAt])
   @@map("taste_signals")
+}
+
+model Ingredient {
+  id            String   @id @default(uuid()) @db.Uuid
+  slug          String   @unique @db.VarChar(180)
+  canonicalName String   @map("canonical_name") @db.VarChar(180)
+  category      String?  @db.VarChar(64)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  recipeIngredients RecipeIngredient[]
+
+  @@index([canonicalName])
+  @@map("ingredients")
+}
+
+model RecipeIngredient {
+  id              String  @id @default(uuid()) @db.Uuid
+  recipeVersionId String  @map("recipe_version_id") @db.Uuid
+  ingredientId    String  @map("ingredient_id") @db.Uuid
+  quantity        Decimal @db.Decimal(10, 3)
+  unit            String  @db.VarChar(32)
+  preparation     String? @db.VarChar(255)
+  note            String? @db.VarChar(255)
+  sortOrder       Int     @map("sort_order")
+
+  recipeVersion RecipeVersion @relation(fields: [recipeVersionId], references: [id], onDelete: Cascade)
+  ingredient    Ingredient    @relation(fields: [ingredientId], references: [id])
+
+  @@unique([recipeVersionId, sortOrder])
+  @@index([ingredientId])
+  @@map("recipe_ingredients")
+}
+
+model RecipeStep {
+  id              String  @id @default(uuid()) @db.Uuid
+  recipeVersionId String  @map("recipe_version_id") @db.Uuid
+  stepNo          Int     @map("step_no")
+  instruction     String
+  durationSeconds Int?    @map("duration_seconds")
+  heatLevel       String? @map("heat_level") @db.VarChar(32)
+  tip             String?
+
+  recipeVersion RecipeVersion @relation(fields: [recipeVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([recipeVersionId, stepNo])
+  @@map("recipe_steps")
 }

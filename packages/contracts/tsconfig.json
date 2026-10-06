@@ -1,0 +1,1 @@
+{"extends":"../../tsconfig.base.json","compilerOptions":{"module":"esnext","noEmit":true},"include":["src/**/*.ts"]}

@@ -1,0 +1,1 @@
+{"name":"@bep-nho/web","private":true,"scripts":{"dev":"next dev -p 3000","build":"next build","lint":"next lint","typecheck":"tsc --noEmit","test":"echo no-tests-yet"},"dependencies":{"next":"^15.0.0","react":"^19.0.0","react-dom":"^19.0.0"},"devDependencies":{"typescript":"^5.6.0"}}

@@ -22,3 +22,17 @@ export type RecipeStepValue = {
   heatLevel?: string;
   tip?: string;
 };
+
+export type CookSessionStatus =
+  | 'started'
+  | 'completed'
+  | 'cancelled';
+
+export type CookEventType =
+  | 'session_started'
+  | 'step_started'
+  | 'step_completed'
+  | 'timer_started'
+  | 'timer_completed'
+  | 'ingredient_adjusted'
+  | 'note_added';

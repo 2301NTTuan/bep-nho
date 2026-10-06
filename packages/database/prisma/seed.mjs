@@ -105,6 +105,25 @@ function makeHash(data) {
 }
 
 async function main() {
+  await prisma.user.upsert({
+    where: {
+      authSubject: 'dev-local-user',
+    },
+
+    update: {
+      status: 'active',
+      locale: 'vi-VN',
+      timezone: 'Asia/Ho_Chi_Minh',
+    },
+
+    create: {
+      authSubject: 'dev-local-user',
+      status: 'active',
+      locale: 'vi-VN',
+      timezone: 'Asia/Ho_Chi_Minh',
+    },
+  });
+
   const recipe = await prisma.recipe.upsert({
     where: {
       slug: recipeData.slug,

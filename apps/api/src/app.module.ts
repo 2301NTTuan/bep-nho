@@ -7,6 +7,7 @@ import { RecipesModule } from './recipes/recipes.module';
 import { CookSessionsModule } from './cook-sessions/cook-sessions.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { PersonalizationModule } from './personalization/personalization.module';
+import { DevModule } from './dev/dev.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { PersonalizationModule } from './personalization/personalization.module'
     CookSessionsModule,
     FeedbackModule,
     PersonalizationModule,
+    DevModule,
   ],
 })
 export class AppModule {}

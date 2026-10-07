@@ -169,6 +169,9 @@ export class FeedbackService {
                   },
                 });
 
+            const exclusionReason =
+              dto.technicalFlags?.[0] ?? null;
+
             for (
               const [
                 dimensionKey,
@@ -177,6 +180,22 @@ export class FeedbackService {
             ) {
               const signalValue =
                 clamp(rawValue);
+
+              if (exclusionReason) {
+                await tx.tasteSignal.create({
+                  data: {
+                    tasteProfileId: profile.id,
+                    dimensionKey,
+                    signalValue,
+                    sourceType: 'cook_feedback',
+                    baseWeight: 1,
+                    qualityFactor: 0,
+                    excludedReason: exclusionReason,
+                  },
+                });
+
+                continue;
+              }
 
               const current =
                 await tx
@@ -328,7 +347,7 @@ export class FeedbackService {
 
             const nextProfileSamples =
               profile.sampleCount +
-              1;
+              (exclusionReason ? 0 : 1);
 
             const maturityScore =
               Math.min(

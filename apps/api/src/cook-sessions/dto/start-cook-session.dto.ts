@@ -8,6 +8,7 @@ import {
   IsString,
   IsUUID,
   Length,
+  Matches,
   Max,
   Min,
 } from 'class-validator';
@@ -18,6 +19,7 @@ export class StartCookSessionDto {
 
   @IsString()
   @Length(1, 180)
+  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
   recipeSlug!: string;
 
   @IsOptional()

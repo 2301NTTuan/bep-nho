@@ -1,7 +1,7 @@
 import { apiRequest } from './api';
-import type { DevBootstrapResponse } from './types';
+import type { CurrentUserContext, CurrentUserResponse } from '@bep-nho/contracts';
 
-export type CurrentUserContext = DevBootstrapResponse['data'];
+export type { CurrentUserContext } from '@bep-nho/contracts';
 
 export interface CurrentUserProvider {
   load(): Promise<CurrentUserContext>;
@@ -9,7 +9,7 @@ export interface CurrentUserProvider {
 
 class DevelopmentCurrentUserProvider implements CurrentUserProvider {
   async load(): Promise<CurrentUserContext> {
-    const response = await apiRequest<DevBootstrapResponse>('/dev/bootstrap');
+    const response = await apiRequest<CurrentUserResponse>('/dev/bootstrap');
     return response.data;
   }
 }

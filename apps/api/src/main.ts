@@ -4,6 +4,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { ApiExceptionFilter } from './http/api-exception.filter';
+import { RequestIdInterceptor } from './http/request-id.interceptor';
 
 async function bootstrap(): Promise<void> {
   const app =
@@ -21,6 +23,9 @@ async function bootstrap(): Promise<void> {
       forbidNonWhitelisted: true,
     }),
   );
+
+  app.useGlobalFilters(new ApiExceptionFilter());
+  app.useGlobalInterceptors(new RequestIdInterceptor());
 
   const origins =
     config

@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsNumber,
+  IsIn,
   IsOptional,
   IsString,
   Max,
@@ -11,6 +12,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { TECHNICAL_FLAGS } from '@bep-nho/contracts';
 
 export class TasteFeedbackDimensionsDto {
   @IsOptional()
@@ -114,6 +116,7 @@ export class SubmitFeedbackDto {
   @IsString({
     each: true,
   })
+  @IsIn(TECHNICAL_FLAGS, { each: true })
   technicalFlags?: string[];
 
   @IsOptional()

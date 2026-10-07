@@ -1,6 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import {
+  randomUUID,
+} from 'node:crypto';
 
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -10,9 +13,17 @@ import {
   Prisma,
 } from '@prisma/client';
 
-import { PrismaService } from '../database/prisma.service';
-import { AddCookEventDto } from './dto/add-cook-event.dto';
-import { StartCookSessionDto } from './dto/start-cook-session.dto';
+import {
+  PrismaService,
+} from '../database/prisma.service';
+
+import {
+  AddCookEventDto,
+} from './dto/add-cook-event.dto';
+
+import {
+  StartCookSessionDto,
+} from './dto/start-cook-session.dto';
 
 type SessionView =
   Prisma.CookSessionGetPayload<{
@@ -22,6 +33,10 @@ type SessionView =
           recipe: true;
         };
       };
+
+      personalizedRecipeVersion:
+        true;
+
       events: true;
     };
   }>;
@@ -36,9 +51,14 @@ export class CookSessionsService {
   private serializeSession(
     session: SessionView,
   ) {
+    const personalized =
+      session
+        .personalizedRecipeVersion;
+
     return {
       data: {
-        id: session.id,
+        id:
+          session.id,
 
         userId:
           session.userId,
@@ -79,6 +99,11 @@ export class CookSessionsService {
               .recipe
               .canonicalTitle,
 
+          source:
+            personalized
+              ? 'personalized'
+              : 'canonical',
+
           versionId:
             session
               .recipeVersion
@@ -88,6 +113,19 @@ export class CookSessionsService {
             session
               .recipeVersion
               .versionNo,
+
+          personalizedVersionId:
+            personalized
+              ?.id ?? null,
+
+          personalizedVersionNo:
+            personalized
+              ?.versionNo ?? null,
+
+          personalizationAlgorithm:
+            personalized
+              ?.algorithmVersion ??
+            null,
         },
 
         events:
@@ -129,7 +167,8 @@ export class CookSessionsService {
     id: string,
   ) {
     const session =
-      await this.prisma.cookSession
+      await this.prisma
+        .cookSession
         .findUnique({
           where: {
             id,
@@ -142,9 +181,13 @@ export class CookSessionsService {
               },
             },
 
+            personalizedRecipeVersion:
+              true,
+
             events: {
               orderBy: {
-                clientSeq: 'asc',
+                clientSeq:
+                  'asc',
               },
             },
           },
@@ -176,46 +219,174 @@ export class CookSessionsService {
       );
     }
 
-    const recipe =
-      await this.prisma.recipe
-        .findFirst({
-          where: {
-            slug:
-              dto.recipeSlug,
+    let recipeId:
+      string;
 
-            status:
-              'published',
-          },
+    let recipeSlug:
+      string;
 
-          include: {
-            versions: {
-              where: {
-                publishedAt: {
-                  not: null,
-                },
-              },
+    let baseVersionId:
+      string;
 
-              orderBy: {
-                versionNo:
-                  'desc',
-              },
+    let baseVersionNo:
+      number;
 
-              take: 1,
-            },
-          },
-        });
+    let defaultServings:
+      number;
+
+    let personalizedId:
+      string | null =
+      null;
+
+    let personalizedVersionNo:
+      number | null =
+      null;
 
     if (
-      !recipe ||
-      !recipe.versions[0]
+      dto
+        .personalizedRecipeVersionId
     ) {
-      throw new NotFoundException(
-        `Recipe '${dto.recipeSlug}' was not found`,
-      );
+      const personalized =
+        await this.prisma
+          .personalizedRecipeVersion
+          .findUnique({
+            where: {
+              id:
+                dto
+                  .personalizedRecipeVersionId,
+            },
+
+            include: {
+              recipe: true,
+
+              baseRecipeVersion:
+                true,
+            },
+          });
+
+      if (
+        !personalized ||
+        personalized.userId !==
+          dto.userId
+      ) {
+        throw new NotFoundException(
+          'Personalized recipe version was not found',
+        );
+      }
+
+      if (
+        personalized
+          .recipe
+          .slug !==
+        dto.recipeSlug
+      ) {
+        throw new BadRequestException(
+          'Personalized recipe version does not belong to the requested recipe',
+        );
+      }
+
+      if (
+        personalized
+          .recipe
+          .status !==
+        'published'
+      ) {
+        throw new ConflictException(
+          'Recipe is not currently published',
+        );
+      }
+
+      recipeId =
+        personalized.recipe.id;
+
+      recipeSlug =
+        personalized.recipe.slug;
+
+      baseVersionId =
+        personalized
+          .baseRecipeVersion
+          .id;
+
+      baseVersionNo =
+        personalized
+          .baseRecipeVersion
+          .versionNo;
+
+      defaultServings =
+        Number(
+          personalized
+            .baseRecipeVersion
+            .servings,
+        );
+
+      personalizedId =
+        personalized.id;
+
+      personalizedVersionNo =
+        personalized.versionNo;
+    } else {
+      const recipe =
+        await this.prisma.recipe
+          .findFirst({
+            where: {
+              slug:
+                dto.recipeSlug,
+
+              status:
+                'published',
+            },
+
+            include: {
+              versions: {
+                where: {
+                  publishedAt: {
+                    not: null,
+                  },
+                },
+
+                orderBy: {
+                  versionNo:
+                    'desc',
+                },
+
+                take: 1,
+              },
+            },
+          });
+
+      if (
+        !recipe ||
+        !recipe.versions[0]
+      ) {
+        throw new NotFoundException(
+          `Recipe '${dto.recipeSlug}' was not found`,
+        );
+      }
+
+      const base =
+        recipe.versions[0];
+
+      recipeId =
+        recipe.id;
+
+      recipeSlug =
+        recipe.slug;
+
+      baseVersionId =
+        base.id;
+
+      baseVersionNo =
+        base.versionNo;
+
+      defaultServings =
+        Number(
+          base.servings,
+        );
     }
 
-    const version =
-      recipe.versions[0];
+    const servings =
+      dto.servings ??
+      defaultServings;
 
     const startedAt =
       new Date();
@@ -225,23 +396,23 @@ export class CookSessionsService {
         .$transaction(
           async (tx) => {
             const created =
-              await tx.cookSession
+              await tx
+                .cookSession
                 .create({
                   data: {
                     userId:
                       user.id,
 
                     recipeVersionId:
-                      version.id,
+                      baseVersionId,
+
+                    personalizedRecipeVersionId:
+                      personalizedId,
 
                     status:
                       'started',
 
-                    servings:
-                      dto.servings ??
-                      Number(
-                        version.servings,
-                      ),
+                    servings,
 
                     syncVersion:
                       1,
@@ -250,7 +421,8 @@ export class CookSessionsService {
                   },
                 });
 
-            await tx.cookEvent
+            await tx
+              .cookEvent
               .create({
                 data: {
                   id:
@@ -269,19 +441,25 @@ export class CookSessionsService {
                     startedAt,
 
                   payload: {
-                    recipeSlug:
-                      recipe.slug,
+                    recipeId,
 
-                    recipeVersion:
-                      version
-                        .versionNo,
+                    recipeSlug,
 
-                    servings:
-                      dto.servings ??
-                      Number(
-                        version
-                          .servings,
-                      ),
+                    recipeSource:
+                      personalizedId
+                        ? 'personalized'
+                        : 'canonical',
+
+                    baseRecipeVersion:
+                      baseVersionNo,
+
+                    personalizedRecipeVersion:
+                      personalizedVersionNo,
+
+                    personalizedRecipeVersionId:
+                      personalizedId,
+
+                    servings,
                   },
 
                   schemaVersion:
@@ -316,7 +494,8 @@ export class CookSessionsService {
     dto: AddCookEventDto,
   ) {
     const existing =
-      await this.prisma.cookEvent
+      await this.prisma
+        .cookEvent
         .findUnique({
           where: {
             cookSessionId_clientSeq:
@@ -391,7 +570,8 @@ export class CookSessionsService {
           .$transaction(
             async (tx) => {
               const created =
-                await tx.cookEvent
+                await tx
+                  .cookEvent
                   .create({
                     data: {
                       id:
@@ -420,7 +600,8 @@ export class CookSessionsService {
                     },
                   });
 
-              await tx.cookSession
+              await tx
+                .cookSession
                 .update({
                   where: {
                     id,
@@ -428,7 +609,8 @@ export class CookSessionsService {
 
                   data: {
                     syncVersion: {
-                      increment: 1,
+                      increment:
+                        1,
                     },
                   },
                 });
@@ -495,19 +677,24 @@ export class CookSessionsService {
                 duplicate.id,
 
               eventType:
-                duplicate.eventType,
+                duplicate
+                  .eventType,
 
               clientSeq:
-                duplicate.clientSeq,
+                duplicate
+                  .clientSeq,
 
               clientTime:
-                duplicate.clientTime,
+                duplicate
+                  .clientTime,
 
               serverTime:
-                duplicate.serverTime,
+                duplicate
+                  .serverTime,
 
               payload:
-                duplicate.payload,
+                duplicate
+                  .payload,
 
               schemaVersion:
                 duplicate
@@ -573,7 +760,8 @@ export class CookSessionsService {
             new Date(),
 
           syncVersion: {
-            increment: 1,
+            increment:
+              1,
           },
         },
       });

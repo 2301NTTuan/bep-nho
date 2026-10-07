@@ -127,8 +127,12 @@ export class PersonalizationService {
                   },
                 },
 
-                adjustmentRules:
-                  true,
+                adjustmentRules: {
+                  orderBy: {
+                    dimensionKey:
+                      'asc',
+                  },
+                },
               },
             },
           },
@@ -163,7 +167,12 @@ export class PersonalizationService {
           },
 
           include: {
-            dimensions: true,
+            dimensions: {
+              orderBy: {
+                dimensionKey:
+                  'asc',
+              },
+            },
           },
         });
 

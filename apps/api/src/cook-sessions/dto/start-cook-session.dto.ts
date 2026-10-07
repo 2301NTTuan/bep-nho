@@ -1,4 +1,7 @@
-import { Type } from 'class-transformer';
+import {
+  Type,
+} from 'class-transformer';
+
 import {
   IsNumber,
   IsOptional,
@@ -16,6 +19,10 @@ export class StartCookSessionDto {
   @IsString()
   @Length(1, 180)
   recipeSlug!: string;
+
+  @IsOptional()
+  @IsUUID()
+  personalizedRecipeVersionId?: string;
 
   @IsOptional()
   @Type(() => Number)

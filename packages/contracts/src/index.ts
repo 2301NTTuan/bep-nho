@@ -48,8 +48,22 @@ export type CookSessionResponse = {
     id: string;
     slug: string;
     title: string;
+
+    source:
+      | 'canonical'
+      | 'personalized';
+
     versionId: string;
     versionNo: number;
+
+    personalizedVersionId:
+      string | null;
+
+    personalizedVersionNo:
+      number | null;
+
+    personalizationAlgorithm:
+      string | null;
   };
 
   events:

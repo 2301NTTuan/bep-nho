@@ -64,20 +64,23 @@ model RecipeVersion {
 }
 
 model CookSession {
-  id              String        @id @default(uuid()) @db.Uuid
-  userId          String        @map("user_id") @db.Uuid
-  recipeVersionId String        @map("recipe_version_id") @db.Uuid
-  status          String        @default("started") @db.VarChar(24)
-  servings        Decimal       @db.Decimal(6, 2)
-  syncVersion     Int           @default(1) @map("sync_version")
-  startedAt       DateTime      @default(now()) @map("started_at") @db.Timestamptz(6)
-  completedAt     DateTime?     @map("completed_at") @db.Timestamptz(6)
-  user            User          @relation(fields: [userId], references: [id])
-  recipeVersion   RecipeVersion @relation(fields: [recipeVersionId], references: [id])
-  feedback        CookFeedback?
-  events          CookEvent[]
+  id                          String                     @id @default(uuid()) @db.Uuid
+  userId                      String                     @map("user_id") @db.Uuid
+  recipeVersionId             String                     @map("recipe_version_id") @db.Uuid
+  personalizedRecipeVersionId String?                    @map("personalized_recipe_version_id") @db.Uuid
+  status                      String                     @default("started") @db.VarChar(24)
+  servings                    Decimal                    @db.Decimal(6, 2)
+  syncVersion                 Int                        @default(1) @map("sync_version")
+  startedAt                   DateTime                   @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt                 DateTime?                  @map("completed_at") @db.Timestamptz(6)
+  user                        User                       @relation(fields: [userId], references: [id])
+  recipeVersion               RecipeVersion              @relation(fields: [recipeVersionId], references: [id])
+  personalizedRecipeVersion   PersonalizedRecipeVersion? @relation(fields: [personalizedRecipeVersionId], references: [id], onDelete: Restrict)
+  feedback                    CookFeedback?
+  events                      CookEvent[]
 
   @@index([userId, startedAt])
+  @@index([personalizedRecipeVersionId])
   @@map("cook_sessions")
 }
 
@@ -242,6 +245,8 @@ model PersonalizedRecipeVersion {
   recipe            Recipe        @relation(fields: [recipeId], references: [id], onDelete: Cascade)
   baseRecipeVersion RecipeVersion @relation(fields: [baseRecipeVersionId], references: [id], onDelete: Restrict)
   tasteProfile      TasteProfile  @relation(fields: [tasteProfileId], references: [id], onDelete: Restrict)
+
+  cookSessions CookSession[]
 
   @@unique([userId, recipeId, versionNo])
   @@unique([userId, recipeId, contentHash])

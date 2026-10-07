@@ -47,3 +47,15 @@
 - Decisions: JSON-facing contracts use ISO timestamp strings; runtime contract constants constrain event and technical-flag vocabularies at the API boundary.
 - Known issues: contracts are TypeScript types/constants rather than generated OpenAPI; authorization still needs real auth before production.
 - Next: add database-backed integration coverage for the complete canonical and personalized learning loops.
+
+## 2026-10-07 — Phase 4: Critical-loop test foundation
+
+- Commit: `6b8c39d` (`test(api): cover personalized cooking loop`).
+- Changed: added an isolated PostgreSQL integration suite for recipe reads, canonical/personalized sessions, event idempotency, feedback state rules, Taste DNA updates, deterministic reuse/versioning, and historical version binding. Technical-failure feedback now records excluded zero-quality signals without changing learned taste.
+- Important files: `apps/api/src/product-loop.integration.spec.ts`, `apps/api/src/feedback/feedback.service.ts`, `apps/api/package.json`.
+- DB migrations: none.
+- APIs: no route changes; feedback containing a supported technical flag is accepted/audited but excluded from Taste DNA.
+- Gates: API test (1 end-to-end integration scenario, pass), API typecheck, fixture cleanup verification (zero test users/recipes left behind).
+- Decisions: tests use uniquely named fixtures in the existing development database and remove only their own records; the database is never reset.
+- Known issues: no browser automation, accessibility audit, or HTTP-level authorization tests yet; the suite currently prioritizes the high-value domain loop.
+- Next: run repository-wide gates, review MVP gaps/debt, and document the next delivery phases.

@@ -12,12 +12,13 @@
     "infra:down": "docker compose --env-file .env -f infra/docker/docker-compose.yml -p bep-nho down",
     "infra:ps": "docker compose --env-file .env -f infra/docker/docker-compose.yml -p bep-nho ps",
     "db:generate": "pnpm --filter @bep-nho/database db:generate",
-    "db:validate": "pnpm --filter @bep-nho/database exec prisma validate --schema prisma/schema.prisma",
+    "db:validate": "dotenv -e .env -- pnpm --filter @bep-nho/database exec prisma validate --schema prisma/schema.prisma",
     "db:migrate": "pnpm --filter @bep-nho/database db:migrate",
     "api:build": "pnpm --filter @bep-nho/api build",
     "api:dev": "pnpm --filter @bep-nho/api dev"
   },
   "devDependencies": {
+    "dotenv-cli": "^8.0.0",
     "turbo": "^2.0.0",
     "typescript": "^5.6.0"
   },

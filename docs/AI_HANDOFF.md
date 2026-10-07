@@ -35,3 +35,15 @@
 - Decisions: product pages depend on a replaceable current-user provider; development identity resolution lives behind the same domain-facing service shape intended for future authenticated subjects.
 - Known issues: production authentication is intentionally unimplemented, so the production web provider returns a clear configuration error.
 - Next: consolidate shared contracts, standardize errors, and tighten request validation without changing product behavior.
+
+## 2026-10-07 — Phase 3: API and contract cleanup
+
+- Commit: `62ece05` (`refactor(api): unify contracts and error envelopes`).
+- Changed: made `@bep-nho/contracts` the shared web/API type source, added correlation IDs to successful envelopes, standardized all HTTP errors, and tightened slug, cook-event, and technical-flag validation.
+- Important files: `packages/contracts/src/index.ts`, `apps/api/src/http/*`, DTOs under `apps/api/src`, `apps/web/lib/types.ts`, `apps/web/lib/api.ts`.
+- DB migrations: none.
+- APIs: error shape is now `{ error: { code, message, requestId, details? } }`; successful data envelopes include `meta.requestId`; `X-Request-ID` is returned as a response header.
+- Gates: contracts/web/API typecheck, API build, smoke checks for validation envelope and caller-provided request-ID propagation.
+- Decisions: JSON-facing contracts use ISO timestamp strings; runtime contract constants constrain event and technical-flag vocabularies at the API boundary.
+- Known issues: contracts are TypeScript types/constants rather than generated OpenAPI; authorization still needs real auth before production.
+- Next: add database-backed integration coverage for the complete canonical and personalized learning loops.

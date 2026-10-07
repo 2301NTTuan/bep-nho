@@ -59,3 +59,25 @@
 - Decisions: tests use uniquely named fixtures in the existing development database and remove only their own records; the database is never reset.
 - Known issues: no browser automation, accessibility audit, or HTTP-level authorization tests yet; the suite currently prioritizes the high-value domain loop.
 - Next: run repository-wide gates, review MVP gaps/debt, and document the next delivery phases.
+
+## 2026-10-07 — Phase 5: Product review
+
+- Commit: `90895ab` (`docs: review MVP readiness and roadmap`).
+- Changed: assessed alpha readiness, product gaps, architecture/operations debt, and defined the next four delivery phases; refreshed the outdated repository README.
+- Important files: `docs/MVP_REVIEW.md`, `README.md`.
+- DB migrations: none.
+- APIs: none.
+- Gates: documentation diff/format check; final repository-wide gates are recorded below after completion.
+- Decisions: prioritize auth/ownership, reliable cooking, user control of learning, and production operations before any social, pantry, household, or monetization domains.
+- Known issues: see `docs/MVP_REVIEW.md`; the largest blocker to public production is real authentication and object-level authorization.
+- Recommended next step: Phase 6 — implement `/v1/me`, secure sessions, ownership guards, and authorization tests.
+
+## Final verification
+
+- Gate-fix commit: `a33eb7d` (`chore: make repository gates reproducible`).
+- `pnpm db:validate`: pass, Prisma CLI/schema version 6.19.3.
+- `pnpm typecheck`: pass, 6/6 workspace tasks.
+- `pnpm test`: pass, 7/7 tasks; critical database integration suite passed and cleaned up its fixtures.
+- `pnpm build`: pass, 6/6 workspace tasks including web, API, and admin production builds.
+- Runtime smoke checks: production API health 200; production `/v1/dev/bootstrap` 404; development validation errors and request-ID propagation verified.
+- Final gate log: `/mnt/d/bep_nho_outputs/codex/final-gates-2026-10-07.log` (outside Git).

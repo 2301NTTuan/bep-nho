@@ -1,16 +1,9 @@
 import {
-  Type,
-} from 'class-transformer';
-
-import {
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   Length,
   Matches,
-  Max,
-  Min,
 } from 'class-validator';
 
 export class StartCookSessionDto {
@@ -25,13 +18,4 @@ export class StartCookSessionDto {
   @IsOptional()
   @IsUUID()
   personalizedRecipeVersionId?: string;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber({
-    maxDecimalPlaces: 2,
-  })
-  @Min(0.5)
-  @Max(50)
-  servings?: number;
 }

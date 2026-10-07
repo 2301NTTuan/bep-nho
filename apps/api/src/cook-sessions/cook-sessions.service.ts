@@ -312,12 +312,22 @@ export class CookSessionsService {
           .baseRecipeVersion
           .versionNo;
 
-      defaultServings =
-        Number(
-          personalized
-            .baseRecipeVersion
-            .servings,
+      const snapshotServings = (
+        personalized.snapshotJson as
+          Prisma.JsonObject
+      ).servings;
+
+      if (
+        typeof snapshotServings !== 'number' ||
+        !Number.isFinite(snapshotServings) ||
+        snapshotServings <= 0
+      ) {
+        throw new ConflictException(
+          'Personalized recipe snapshot has invalid servings',
         );
+      }
+
+      defaultServings = snapshotServings;
 
       personalizedId =
         personalized.id;
@@ -385,7 +395,6 @@ export class CookSessionsService {
     }
 
     const servings =
-      dto.servings ??
       defaultServings;
 
     const startedAt =
@@ -714,57 +723,38 @@ export class CookSessionsService {
   async complete(
     id: string,
   ) {
-    const session =
-      await this.prisma
-        .cookSession
-        .findUnique({
-          where: {
-            id,
-          },
-        });
-
-    if (!session) {
-      throw new NotFoundException(
-        `Cook session '${id}' was not found`,
-      );
-    }
-
-    if (
-      session.status ===
-      'completed'
-    ) {
-      return this.get(id);
-    }
-
-    if (
-      session.status !==
-      'started'
-    ) {
-      throw new ConflictException(
-        `Cook session '${id}' cannot be completed from status '${session.status}'`,
-      );
-    }
-
-    await this.prisma
+    const transition = await this.prisma
       .cookSession
-      .update({
+      .updateMany({
         where: {
           id,
+          status: 'started',
         },
-
         data: {
-          status:
-            'completed',
-
-          completedAt:
-            new Date(),
-
-          syncVersion: {
-            increment:
-              1,
-          },
+          status: 'completed',
+          completedAt: new Date(),
+          syncVersion: { increment: 1 },
         },
       });
+
+    if (transition.count === 0) {
+      const current = await this.prisma.cookSession.findUnique({
+        where: { id },
+        select: { status: true },
+      });
+
+      if (!current) {
+        throw new NotFoundException(
+          `Cook session '${id}' was not found`,
+        );
+      }
+
+      if (current.status !== 'completed') {
+        throw new ConflictException(
+          `Cook session '${id}' cannot be completed from status '${current.status}'`,
+        );
+      }
+    }
 
     return this.get(id);
   }

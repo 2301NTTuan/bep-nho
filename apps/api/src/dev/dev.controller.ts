@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CurrentUserService } from '../identity/current-user.service';
 
@@ -12,6 +12,11 @@ export class DevController {
   @Get('bootstrap')
   async bootstrap() {
     const environment = this.config.get<string>('NODE_ENV', 'development');
+
+    if (environment === 'production') {
+      throw new NotFoundException();
+    }
+
     const context = await this.currentUser.resolveByAuthSubject('dev-local-user');
 
     return {

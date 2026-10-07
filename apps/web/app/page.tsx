@@ -85,7 +85,7 @@ export default function Home() {
       <section id="recipes" className="recipeSection">
         <div className="sectionTitle">
           <div><div className="smallLabel">Gợi ý từ gian bếp</div><h2>Hôm nay mình nấu gì?</h2></div>
-          {recipes && <p>{recipes.meta.count} công thức đã kiểm chứng</p>}
+          {recipes && <p>{recipes.meta.count} công thức thử nghiệm</p>}
         </div>
 
         {error && (

@@ -36,10 +36,10 @@ function durationText(seconds: number | null) {
   return seconds < 60 ? `${seconds} giây` : `${Math.round(seconds / 60)} phút`;
 }
 
-function FeedbackChoice({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+function FeedbackChoice({ label, value, onChange }: { label: string; value: number | null; onChange: (value: number) => void }) {
   return (
-    <fieldset className="feedbackField">
-      <legend>{label}</legend>
+    <fieldset className={value === null ? 'feedbackField unanswered' : 'feedbackField answered'}>
+      <legend>{label}<small>{value === null ? 'Chưa chọn' : value === 0 ? 'Đã chọn · Vừa rồi' : 'Đã chọn'}</small></legend>
       <div className="choiceGrid">
         {feedbackChoices.map((choice) => (
           <button key={choice.value} type="button" className={value === choice.value ? 'choice active' : 'choice'} onClick={() => onChange(choice.value)}>
@@ -67,9 +67,9 @@ export default function RecipePage() {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [overall, setOverall] = useState(5);
-  const [saltiness, setSaltiness] = useState(0);
-  const [garlicOnion, setGarlicOnion] = useState(0);
-  const [softness, setSoftness] = useState(0);
+  const [saltiness, setSaltiness] = useState<number | null>(null);
+  const [garlicOnion, setGarlicOnion] = useState<number | null>(null);
+  const [softness, setSoftness] = useState<number | null>(null);
   const [technicalFlags, setTechnicalFlags] = useState<string[]>([]);
   const [note, setNote] = useState('');
 
@@ -130,7 +130,6 @@ export default function RecipePage() {
         body: JSON.stringify({
           userId: currentUser.user.id,
           recipeSlug: recipe.data.slug,
-          servings: personalized?.snapshot.servings ?? recipe.data.version.servings,
           personalizedRecipeVersionId: usePersonalized ? personalized?.id : undefined,
         }),
       });
@@ -164,11 +163,22 @@ export default function RecipePage() {
 
   async function submitFeedback() {
     if (!session || !currentUser || !recipe) return;
+    const dimensions = {
+      ...(saltiness === null ? {} : { saltiness }),
+      ...(garlicOnion === null ? {} : { garlic_onion: garlicOnion }),
+      ...(softness === null ? {} : { softness }),
+    };
+
+    if (Object.keys(dimensions).length === 0) {
+      setError('Hãy chọn ít nhất một cảm nhận khẩu vị. “Vừa rồi” cũng là một lựa chọn rõ ràng.');
+      return;
+    }
+
     setBusy(true); setError(null);
     try {
       await apiRequest(`/cook-sessions/${session.data.id}/feedback`, {
         method: 'POST',
-        body: JSON.stringify({ overallScore: overall, dimensions: { saltiness, garlic_onion: garlicOnion, softness }, technicalFlags, privateNote: note || undefined }),
+        body: JSON.stringify({ overallScore: overall, dimensions, technicalFlags, privateNote: note || undefined }),
       });
       const next = await apiRequest<PersonalizedResponse>(`/users/${currentUser.user.id}/recipes/${recipe.data.slug}/personalized-versions`, { method: 'POST' });
       setPersonalized(next.data); setStage('done');
@@ -192,6 +202,7 @@ export default function RecipePage() {
   if (!recipe || !currentUser || !base) return <LoadingRecipe />;
 
   const currentStep = activeSteps[stepIndex];
+  const hasTasteAnswer = saltiness !== null || garlicOnion !== null || softness !== null;
   const totalTime = (personalized?.snapshot.prepTimeMinutes ?? base.prepTimeMinutes ?? 0) + (personalized?.snapshot.cookTimeMinutes ?? base.cookTimeMinutes ?? 0);
 
   if (stage === 'cooking' && currentStep) {
@@ -247,7 +258,8 @@ export default function RecipePage() {
 
           <label className="noteField"><span>Ghi chú riêng <small>Không bắt buộc</small></span><textarea value={note} maxLength={2000} placeholder="Ví dụ: lần sau thêm chút tiêu, kho cạn hơn…" onChange={(event) => setNote(event.target.value)} /></label>
           {error && <div className="inlineError" role="alert">{error}</div>}
-          <button className="button feedbackSubmit" type="button" disabled={busy} onClick={() => void submitFeedback()}>{busy ? 'Bếp Nhớ đang học…' : 'Lưu và xem Bếp Nhớ đã học gì →'}</button>
+          {!hasTasteAnswer && <p className="feedbackRequirement">Chọn ít nhất một cảm nhận. Bếp Nhớ sẽ không tự hiểu ô chưa chọn là “vừa”.</p>}
+          <button className="button feedbackSubmit" type="button" disabled={busy || !hasTasteAnswer} onClick={() => void submitFeedback()}>{busy ? 'Bếp Nhớ đang học…' : 'Lưu và xem Bếp Nhớ đã học gì →'}</button>
         </section>
       </main>
     );
@@ -271,7 +283,7 @@ export default function RecipePage() {
   const adjustments = personalized?.snapshot.adjustments ?? [];
   return (
     <main className="shell detailShell">
-      <header className="detailNav"><Link href="/" className="backLink">← Về sổ công thức</Link><span className="statusDot"><i /> Công thức đã kiểm chứng</span></header>
+      <header className="detailNav"><Link href="/" className="backLink">← Về sổ công thức</Link><span className="statusDot"><i /> Công thức thử nghiệm</span></header>
       <section className="detailHero">
         <div className="detailCopy">
           <div className="eyebrow"><span /> Món Việt · {personalized ? 'Đã được Bếp Nhớ điều chỉnh' : 'Công thức chuẩn'}</div>

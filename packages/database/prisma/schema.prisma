@@ -18,18 +18,21 @@ model User {
   cookSessions  CookSession[]
   tasteProfiles TasteProfile[]
 
+  personalizedRecipeVersions PersonalizedRecipeVersion[]
+
   @@map("users")
 }
 
 model Recipe {
-  id             String          @id @default(uuid()) @db.Uuid
-  slug           String          @unique @db.VarChar(180)
-  canonicalTitle String          @map("canonical_title") @db.VarChar(180)
-  status         String          @default("draft") @db.VarChar(24)
-  cuisine        String          @default("vietnamese") @db.VarChar(64)
-  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
-  versions       RecipeVersion[]
+  id                         String                      @id @default(uuid()) @db.Uuid
+  slug                       String                      @unique @db.VarChar(180)
+  canonicalTitle             String                      @map("canonical_title") @db.VarChar(180)
+  status                     String                      @default("draft") @db.VarChar(24)
+  cuisine                    String                      @default("vietnamese") @db.VarChar(64)
+  createdAt                  DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  versions                   RecipeVersion[]
+  personalizedRecipeVersions PersonalizedRecipeVersion[]
 
   @@index([status, canonicalTitle])
   @@map("recipes")
@@ -50,6 +53,10 @@ model RecipeVersion {
   ingredients  RecipeIngredient[]
   steps        RecipeStep[]
   cookSessions CookSession[]
+
+  adjustmentRules RecipeAdjustmentRule[]
+
+  personalizedVersions PersonalizedRecipeVersion[]
 
   @@unique([recipeId, versionNo])
   @@index([recipeId, publishedAt])
@@ -104,15 +111,16 @@ model CookFeedback {
 }
 
 model TasteProfile {
-  id               String           @id @default(uuid()) @db.Uuid
-  userId           String           @map("user_id") @db.Uuid
-  algorithmVersion String           @map("algorithm_version") @db.VarChar(32)
-  maturityScore    Decimal          @default(0) @map("maturity_score") @db.Decimal(5, 4)
-  sampleCount      Int              @default(0) @map("sample_count")
-  computedAt       DateTime         @default(now()) @map("computed_at") @db.Timestamptz(6)
-  user             User             @relation(fields: [userId], references: [id])
-  dimensions       TasteDimension[]
-  signals          TasteSignal[]
+  id                         String                      @id @default(uuid()) @db.Uuid
+  userId                     String                      @map("user_id") @db.Uuid
+  algorithmVersion           String                      @map("algorithm_version") @db.VarChar(32)
+  maturityScore              Decimal                     @default(0) @map("maturity_score") @db.Decimal(5, 4)
+  sampleCount                Int                         @default(0) @map("sample_count")
+  computedAt                 DateTime                    @default(now()) @map("computed_at") @db.Timestamptz(6)
+  user                       User                        @relation(fields: [userId], references: [id])
+  dimensions                 TasteDimension[]
+  signals                    TasteSignal[]
+  personalizedRecipeVersions PersonalizedRecipeVersion[]
 
   @@index([userId])
   @@map("taste_profiles")
@@ -157,7 +165,8 @@ model Ingredient {
   category      String?  @db.VarChar(64)
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  recipeIngredients RecipeIngredient[]
+  recipeIngredients     RecipeIngredient[]
+  recipeAdjustmentRules RecipeAdjustmentRule[]
 
   @@index([canonicalName])
   @@map("ingredients")
@@ -194,4 +203,48 @@ model RecipeStep {
 
   @@unique([recipeVersionId, stepNo])
   @@map("recipe_steps")
+}
+
+model RecipeAdjustmentRule {
+  id              String @id @default(uuid()) @db.Uuid
+  recipeVersionId String @map("recipe_version_id") @db.Uuid
+  ingredientId    String @map("ingredient_id") @db.Uuid
+  dimensionKey    String @map("dimension_key") @db.VarChar(64)
+
+  sensitivity Decimal @db.Decimal(6, 5)
+  minFactor   Decimal @default(0.75) @map("min_factor") @db.Decimal(6, 5)
+  maxFactor   Decimal @default(1.25) @map("max_factor") @db.Decimal(6, 5)
+
+  recipeVersion RecipeVersion @relation(fields: [recipeVersionId], references: [id], onDelete: Cascade)
+  ingredient    Ingredient    @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@unique([recipeVersionId, ingredientId, dimensionKey])
+  @@index([recipeVersionId])
+  @@map("recipe_adjustment_rules")
+}
+
+model PersonalizedRecipeVersion {
+  id                  String @id @default(uuid()) @db.Uuid
+  userId              String @map("user_id") @db.Uuid
+  recipeId            String @map("recipe_id") @db.Uuid
+  baseRecipeVersionId String @map("base_recipe_version_id") @db.Uuid
+  tasteProfileId      String @map("taste_profile_id") @db.Uuid
+
+  versionNo        Int    @map("version_no")
+  algorithmVersion String @map("algorithm_version") @db.VarChar(32)
+  contentHash      String @map("content_hash") @db.VarChar(64)
+
+  adjustmentJson Json     @map("adjustment_json")
+  snapshotJson   Json     @map("snapshot_json")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe            Recipe        @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  baseRecipeVersion RecipeVersion @relation(fields: [baseRecipeVersionId], references: [id], onDelete: Restrict)
+  tasteProfile      TasteProfile  @relation(fields: [tasteProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, recipeId, versionNo])
+  @@unique([userId, recipeId, contentHash])
+  @@index([userId, recipeId, createdAt])
+  @@map("personalized_recipe_versions")
 }

@@ -9,7 +9,9 @@
     "build": "echo prisma-schema",
     "lint": "echo prisma-schema",
     "test": "echo prisma-schema",
-    "db:seed": "node prisma/seed.mjs"
+    "db:seed": "pnpm run db:seed:base && pnpm run db:seed:personalization",
+    "db:seed:base": "node prisma/seed.mjs",
+    "db:seed:personalization": "node prisma/seed-personalization.mjs"
   },
   "dependencies": {
     "@prisma/client": "6.19.3"

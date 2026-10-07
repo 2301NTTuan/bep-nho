@@ -90,3 +90,12 @@ export type TasteDimensionResponse = {
   sampleCount: number;
   manualOverride: number | null;
 };
+
+export type PersonalizedRecipeVersionResponse = {
+  id: string;
+  versionNo: number;
+  algorithmVersion: string;
+  createdAt: string | Date;
+  reused?: boolean;
+  snapshot: unknown;
+};

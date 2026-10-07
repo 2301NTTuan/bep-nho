@@ -36,3 +36,12 @@ export type CookEventType =
   | 'timer_completed'
   | 'ingredient_adjusted'
   | 'note_added';
+
+export type RecipeAdjustment = {
+  ingredientSlug: string;
+  dimension: string;
+  baseQuantity: number;
+  quantity: number;
+  unit: string;
+  deltaPercent: number;
+};

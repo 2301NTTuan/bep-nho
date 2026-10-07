@@ -31,6 +31,20 @@ export class ApiRequestError
   }
 }
 
+export function getErrorMessage(
+  cause: unknown,
+  fallback: string,
+): string {
+  if (cause instanceof ApiRequestError) {
+    const body = cause.body as { message?: string; error?: { message?: string } } | null;
+    return body?.error?.message ?? body?.message ?? fallback;
+  }
+
+  return cause instanceof Error && cause.message !== 'Failed to fetch'
+    ? cause.message
+    : fallback;
+}
+
 export async function apiRequest<T>(
   path: string,
   init?: RequestInit,

@@ -1,299 +1,136 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { apiRequest, getErrorMessage } from '../lib/api';
+import type { DevBootstrapResponse, RecipeListResponse } from '../lib/types';
 
-import {
-  useEffect,
-  useState,
-} from 'react';
-
-import {
-  apiRequest,
-} from '../lib/api';
-
-import type {
-  DevBootstrapResponse,
-  RecipeListResponse,
-} from '../lib/types';
+function Brand() {
+  return (
+    <Link href="/" className="brand" aria-label="Bếp Nhớ — trang chủ">
+      <span className="brandMark" aria-hidden="true">BN</span>
+      <span><strong>Bếp Nhớ</strong><small>Gian bếp hiểu bạn</small></span>
+    </Link>
+  );
+}
 
 export default function Home() {
-  const [
-    recipes,
-    setRecipes,
-  ] = useState<
-    RecipeListResponse | null
-  >(null);
-
-  const [
-    dev,
-    setDev,
-  ] = useState<
-    DevBootstrapResponse | null
-  >(null);
-
-  const [
-    error,
-    setError,
-  ] = useState<
-    string | null
-  >(null);
+  const [recipes, setRecipes] = useState<RecipeListResponse | null>(null);
+  const [dev, setDev] = useState<DevBootstrapResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
 
     async function load() {
+      setError(null);
       try {
-        const [
-          recipeData,
-          devData,
-        ] =
-          await Promise.all([
-            apiRequest<
-              RecipeListResponse
-            >(
-              '/recipes?limit=24',
-            ),
-
-            apiRequest<
-              DevBootstrapResponse
-            >(
-              '/dev/bootstrap',
-            ),
-          ]);
-
-        if (!active) {
-          return;
+        const [recipeData, devData] = await Promise.all([
+          apiRequest<RecipeListResponse>('/recipes?limit=24'),
+          apiRequest<DevBootstrapResponse>('/dev/bootstrap'),
+        ]);
+        if (active) {
+          setRecipes(recipeData);
+          setDev(devData);
         }
-
-        setRecipes(
-          recipeData,
-        );
-
-        setDev(
-          devData,
-        );
       } catch (cause) {
-        if (!active) {
-          return;
-        }
-
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : 'Không tải được dữ liệu.',
-        );
+        if (active) setError(getErrorMessage(cause, 'Không mở được sổ công thức.'));
       }
     }
 
     void load();
+    return () => { active = false; };
+  }, [reloadKey]);
 
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const taste =
-    dev?.data
-      .tasteProfile;
+  const taste = dev?.data.tasteProfile;
 
   return (
-    <main className="shell">
+    <main className="shell homeShell">
       <header className="topbar">
-        <Link
-          href="/"
-          className="brand"
-        >
-          <span className="brandMark">
-            B
-          </span>
-
-          <span>
-            Bếp Nhớ
-          </span>
-        </Link>
-
-        <span className="pill">
-          Bản phát triển
-        </span>
+        <Brand />
+        <nav className="topnav" aria-label="Điều hướng chính">
+          <a href="#recipes">Món hôm nay</a>
+          <span className="statusDot"><i /> Bếp đang mở</span>
+        </nav>
       </header>
 
       <section className="hero">
         <div className="heroCard">
-          <div className="smallLabel">
-            Trợ lý nấu món Việt
+          <div className="eyebrow"><span /> Trợ lý nấu món Việt có trí nhớ</div>
+          <h1>Càng nấu, Bếp Nhớ càng <em>hiểu khẩu vị</em> của bạn.</h1>
+          <p>Mỗi lần vào bếp là một lần công thức được tinh chỉnh vừa đủ — có lý do, có giới hạn và luôn giữ lại phiên bản bạn đã nấu.</p>
+          <a className="button heroAction" href="#recipes">Chọn món để nấu <span aria-hidden="true">↓</span></a>
+          <div className="heroProof" aria-label="Đặc tính của Bếp Nhớ">
+            <span><b>01</b> Công thức chuẩn</span>
+            <span><b>02</b> Học sau mỗi lần nấu</span>
+            <span><b>03</b> Điều chỉnh có kiểm soát</span>
           </div>
-
-          <h1>
-            Càng nấu,
-            <br />
-            càng hiểu khẩu vị.
-          </h1>
-
-          <p>
-            Bếp Nhớ ghi nhớ những gì
-            bạn thích sau mỗi lần nấu,
-            rồi điều chỉnh công thức
-            tiếp theo vừa đủ — không
-            thay đổi cực đoan chỉ sau
-            một lần phản hồi.
-          </p>
         </div>
 
         <aside className="tasteCard">
+          <div className="tasteOrnament" aria-hidden="true">味</div>
           <div>
-            <div className="smallLabel">
-              Taste DNA
-            </div>
-
-            <strong>
-              {taste
-                ? `${Math.round(
-                    taste
-                      .maturityScore *
-                      100,
-                  )}%`
-                : '—'}
-            </strong>
-
-            <p>
-              Độ trưởng thành hồ sơ
-              khẩu vị hiện tại.
-            </p>
+            <div className="smallLabel light">Taste DNA của bạn</div>
+            <strong>{taste ? `${Math.round(taste.maturityScore * 100)}%` : '—'}</strong>
+            <p>{taste ? 'Hồ sơ đang dần rõ nét qua từng bữa cơm.' : 'Nấu món đầu tiên để Bếp Nhớ bắt đầu học.'}</p>
           </div>
-
-          <div>
-            {taste
-              ? `${taste.sampleCount} lần nấu đã được học`
-              : 'Chưa có dữ liệu khẩu vị'}
-          </div>
+          <div className="tasteProgress" aria-hidden="true"><span style={{ width: `${Math.max(4, (taste?.maturityScore ?? 0) * 100)}%` }} /></div>
+          <div className="tasteMeta"><span>{taste?.sampleCount ?? 0}</span> lần nấu đã góp vào khẩu vị</div>
         </aside>
       </section>
 
-      <section>
+      <section id="recipes" className="recipeSection">
         <div className="sectionTitle">
-          <div>
-            <div className="smallLabel">
-              Hôm nay nấu gì?
-            </div>
-
-            <h2>
-              Công thức của Bếp Nhớ
-            </h2>
-          </div>
-
-          {recipes && (
-            <p>
-              {recipes.meta.count}
-              {' '}
-              món
-            </p>
-          )}
+          <div><div className="smallLabel">Gợi ý từ gian bếp</div><h2>Hôm nay mình nấu gì?</h2></div>
+          {recipes && <p>{recipes.meta.count} công thức đã kiểm chứng</p>}
         </div>
 
         {error && (
-          <div className="errorBox">
-            {error}
+          <div className="stateCard errorState" role="alert">
+            <span className="stateIcon">!</span><div><strong>Gian bếp đang tạm gián đoạn</strong><p>{error}</p></div>
+            <button className="button secondary" type="button" onClick={() => setReloadKey((value) => value + 1)}>Thử lại</button>
           </div>
         )}
 
-        {!error &&
-         !recipes && (
-          <div className="loading">
-            Đang mở sổ công thức…
+        {!error && !recipes && (
+          <div className="recipeGrid" aria-label="Đang tải công thức">
+            {[1, 2, 3].map((item) => <div className="recipeCard skeletonCard" key={item}><i /><i /><i /></div>)}
           </div>
         )}
 
-        {recipes && (
+        {recipes?.data.length === 0 && (
+          <div className="stateCard"><span className="stateIcon">○</span><div><strong>Sổ công thức còn trống</strong><p>Các món Việt đầu tiên đang được chuẩn bị.</p></div></div>
+        )}
+
+        {recipes && recipes.data.length > 0 && (
           <div className="recipeGrid">
-            {recipes.data.map(
-              (recipe) => {
-                const version =
-                  recipe
-                    .latestVersion;
-
-                const totalTime =
-                  (
-                    version
-                      ?.prepTimeMinutes ??
-                    0
-                  ) +
-                  (
-                    version
-                      ?.cookTimeMinutes ??
-                    0
-                  );
-
-                return (
-                  <Link
-                    key={
-                      recipe.id
-                    }
-                    href={
-                      `/recipes/${recipe.slug}`
-                    }
-                    className="recipeCard"
-                  >
-                    <div>
-                      <span className="pill brand">
-                        Món Việt
-                      </span>
-
-                      <h3>
-                        {
-                          recipe.title
-                        }
-                      </h3>
-
-                      <p>
-                        {version
-                          ?.summary ??
-                          'Công thức nền của Bếp Nhớ.'}
-                      </p>
-                    </div>
-
+            {recipes.data.map((recipe, index) => {
+              const version = recipe.latestVersion;
+              const totalTime = (version?.prepTimeMinutes ?? 0) + (version?.cookTimeMinutes ?? 0);
+              return (
+                <Link key={recipe.id} href={`/recipes/${recipe.slug}`} className="recipeCard">
+                  <div className={`recipeVisual tone${(index % 3) + 1}`}>
+                    <span className="recipeIndex">0{index + 1}</span>
+                    <span className="bowl" aria-hidden="true"><i /><i /><i /></span>
+                    <span className="pill lightPill">Món Việt</span>
+                  </div>
+                  <div className="recipeBody">
+                    <div><h3>{recipe.title}</h3><p>{version?.summary ?? 'Công thức nền cân bằng, rõ từng bước.'}</p></div>
                     <div className="recipeMeta">
-                      <span className="pill">
-                        V
-                        {
-                          version
-                            ?.versionNo ??
-                          1
-                        }
-                      </span>
-
-                      {totalTime >
-                        0 && (
-                        <span className="pill">
-                          {totalTime}
-                          {' '}
-                          phút
-                        </span>
-                      )}
-
-                      {version && (
-                        <span className="pill">
-                          {
-                            version
-                              .servings
-                          }
-                          {' '}
-                          phần
-                        </span>
-                      )}
+                      {totalTime > 0 && <span><i className="clockIcon" /> {totalTime} phút</span>}
+                      {version && <span>{version.servings} phần</span>}
+                      <b aria-label="Mở công thức">→</b>
                     </div>
-                  </Link>
-                );
-              },
-            )}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         )}
       </section>
 
-      <div className="footerNote">
-        Bếp Nhớ · Recipe → Cook →
-        Feedback → Taste DNA →
-        Personalized Recipe
-      </div>
+      <footer className="siteFooter"><Brand /><p>Recipe → Cook → Feedback → Taste DNA → Công thức của riêng bạn</p></footer>
     </main>
   );
 }

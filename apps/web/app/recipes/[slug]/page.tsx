@@ -1,25 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-
-import {
-  useParams,
-} from 'next/navigation';
-
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
-
-import {
-  ApiRequestError,
-  apiRequest,
-} from '../../../lib/api';
-
+import { useParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import { ApiRequestError, apiRequest, getErrorMessage } from '../../../lib/api';
 import type {
   CookSessionResponse,
   DevBootstrapResponse,
+  PersonalizedIngredient,
   PersonalizedResponse,
   PersonalizedVersion,
   RecipeDetailResponse,
@@ -27,1389 +15,302 @@ import type {
   RecipeStep,
 } from '../../../lib/types';
 
-type Stage =
-  | 'detail'
-  | 'cooking'
-  | 'feedback'
-  | 'done';
+type Stage = 'detail' | 'cooking' | 'feedback' | 'done';
+type IngredientView = RecipeIngredient | PersonalizedIngredient;
 
-function durationText(
-  seconds:
-    number | null,
-) {
-  if (!seconds) {
-    return null;
-  }
+const feedbackChoices = [
+  { value: -1, short: 'Ít hơn' },
+  { value: -0.5, short: 'Hơi ít' },
+  { value: 0, short: 'Vừa rồi' },
+  { value: 0.5, short: 'Hơi nhiều' },
+  { value: 1, short: 'Nhiều hơn' },
+];
 
-  if (
-    seconds < 60
-  ) {
-    return `${seconds} giây`;
-  }
-
-  const minutes =
-    Math.round(
-      seconds / 60,
-    );
-
-  return `${minutes} phút`;
+function formatQuantity(value: number) {
+  return Number.isInteger(value) ? `${value}` : value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
 }
 
-function formatQuantity(
-  value: number,
-) {
-  return Number.isInteger(
-    value,
-  )
-    ? `${value}`
-    : value
-        .toFixed(3)
-        .replace(
-          /0+$/,
-          '',
-        )
-        .replace(
-          /\.$/,
-          '',
-        );
+function durationText(seconds: number | null) {
+  if (!seconds) return null;
+  return seconds < 60 ? `${seconds} giây` : `${Math.round(seconds / 60)} phút`;
 }
 
-function TasteSlider(
-  {
-    label,
-    left,
-    right,
-    value,
-    onChange,
-  }: {
-    label: string;
-    left: string;
-    right: string;
-    value: number;
-    onChange:
-      (value: number) => void;
-  },
-) {
+function FeedbackChoice({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
   return (
-    <div className="sliderRow">
-      <div className="sliderHead">
-        <span>
-          {label}
-        </span>
-
-        <span>
-          {value > 0
-            ? `+${value}`
-            : value}
-        </span>
+    <fieldset className="feedbackField">
+      <legend>{label}</legend>
+      <div className="choiceGrid">
+        {feedbackChoices.map((choice) => (
+          <button key={choice.value} type="button" className={value === choice.value ? 'choice active' : 'choice'} onClick={() => onChange(choice.value)}>
+            {choice.short}
+          </button>
+        ))}
       </div>
-
-      <input
-        type="range"
-        min="-1"
-        max="1"
-        step="0.25"
-        value={value}
-        onChange={
-          (event) =>
-            onChange(
-              Number(
-                event
-                  .target
-                  .value,
-              ),
-            )
-        }
-      />
-
-      <div className="sliderLabels">
-        <span>
-          {left}
-        </span>
-
-        <span>
-          Vừa
-        </span>
-
-        <span>
-          {right}
-        </span>
-      </div>
-    </div>
+    </fieldset>
   );
+}
+
+function LoadingRecipe() {
+  return <main className="shell"><div className="detailSkeleton"><i /><i /><i /><i /></div></main>;
 }
 
 export default function RecipePage() {
-  const params =
-    useParams<{
-      slug: string;
-    }>();
-
-  const slug =
-    params.slug;
-
-  const [
-    recipe,
-    setRecipe,
-  ] = useState<
-    RecipeDetailResponse | null
-  >(null);
-
-  const [
-    dev,
-    setDev,
-  ] = useState<
-    DevBootstrapResponse | null
-  >(null);
-
-  const [
-    personalized,
-    setPersonalized,
-  ] = useState<
-    PersonalizedVersion | null
-  >(null);
-
-  const [
-    session,
-    setSession,
-  ] = useState<
-    CookSessionResponse | null
-  >(null);
-
-  const [
-    stage,
-    setStage,
-  ] = useState<Stage>(
-    'detail',
-  );
-
-  const [
-    stepIndex,
-    setStepIndex,
-  ] = useState(0);
-
-  const [
-    busy,
-    setBusy,
-  ] = useState(false);
-
-  const [
-    error,
-    setError,
-  ] = useState<
-    string | null
-  >(null);
-
-  const [
-    overall,
-    setOverall,
-  ] = useState(4.5);
-
-  const [
-    saltiness,
-    setSaltiness,
-  ] = useState(0);
-
-  const [
-    garlicOnion,
-    setGarlicOnion,
-  ] = useState(0);
-
-  const [
-    softness,
-    setSoftness,
-  ] = useState(0);
-
-  const [
-    note,
-    setNote,
-  ] = useState('');
+  const { slug } = useParams<{ slug: string }>();
+  const [recipe, setRecipe] = useState<RecipeDetailResponse | null>(null);
+  const [dev, setDev] = useState<DevBootstrapResponse | null>(null);
+  const [personalized, setPersonalized] = useState<PersonalizedVersion | null>(null);
+  const [session, setSession] = useState<CookSessionResponse | null>(null);
+  const [stage, setStage] = useState<Stage>('detail');
+  const [stepIndex, setStepIndex] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [overall, setOverall] = useState(5);
+  const [saltiness, setSaltiness] = useState(0);
+  const [garlicOnion, setGarlicOnion] = useState(0);
+  const [softness, setSoftness] = useState(0);
+  const [technicalFlags, setTechnicalFlags] = useState<string[]>([]);
+  const [note, setNote] = useState('');
 
   useEffect(() => {
-    let active =
-      true;
-
+    let active = true;
     async function load() {
+      setError(null);
       try {
-        const [
-          recipeData,
-          devData,
-        ] =
-          await Promise.all([
-            apiRequest<
-              RecipeDetailResponse
-            >(
-              `/recipes/${slug}`,
-            ),
-
-            apiRequest<
-              DevBootstrapResponse
-            >(
-              '/dev/bootstrap',
-            ),
-          ]);
-
-        if (!active) {
-          return;
-        }
-
-        setRecipe(
-          recipeData,
-        );
-
-        setDev(
-          devData,
-        );
-
+        const [recipeData, devData] = await Promise.all([
+          apiRequest<RecipeDetailResponse>(`/recipes/${slug}`),
+          apiRequest<DevBootstrapResponse>('/dev/bootstrap'),
+        ]);
+        if (!active) return;
+        setRecipe(recipeData);
+        setDev(devData);
         try {
-          const latest =
-            await apiRequest<
-              PersonalizedResponse
-            >(
-              `/users/${devData.data.user.id}` +
-              `/recipes/${slug}` +
-              '/personalized-versions/latest',
-            );
-
-          if (active) {
-            setPersonalized(
-              latest.data,
-            );
-          }
-        } catch (
-          cause
-        ) {
-          if (
-            !(
-              cause instanceof
-                ApiRequestError &&
-              cause.status === 404
-            )
-          ) {
-            throw cause;
-          }
+          const latest = await apiRequest<PersonalizedResponse>(`/users/${devData.data.user.id}/recipes/${slug}/personalized-versions/latest`);
+          if (active) setPersonalized(latest.data);
+        } catch (cause) {
+          if (!(cause instanceof ApiRequestError && cause.status === 404)) throw cause;
         }
       } catch (cause) {
-        if (!active) {
-          return;
-        }
-
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : 'Không tải được món ăn.',
-        );
+        if (active) setError(getErrorMessage(cause, 'Không tải được món ăn.'));
       }
     }
-
     void load();
+    return () => { active = false; };
+  }, [slug, reloadKey]);
 
-    return () => {
-      active = false;
-    };
-  }, [slug]);
-
-  const cookingPersonalized =
-    session?.data
-      .recipe
-      .source ===
-    'personalized';
-
-  const visibleIngredients =
-    useMemo(() => {
-      if (!recipe) {
-        return [];
-      }
-
-      if (
-        personalized
-      ) {
-        return personalized
-          .snapshot
-          .ingredients;
-      }
-
-      return recipe
-        .data
-        .version
-        .ingredients;
-    }, [
-      personalized,
-      recipe,
-    ]);
-
-  const activeSteps:
-    RecipeStep[] =
-    useMemo(() => {
-      if (!recipe) {
-        return [];
-      }
-
-      if (
-        cookingPersonalized &&
-        personalized
-      ) {
-        return personalized
-          .snapshot
-          .steps;
-      }
-
-      return recipe
-        .data
-        .version
-        .steps;
-    }, [
-      cookingPersonalized,
-      personalized,
-      recipe,
-    ]);
+  const cookingPersonalized = session?.data.recipe.source === 'personalized';
+  const base = recipe?.data.version;
+  const visibleIngredients: IngredientView[] = useMemo(
+    () => personalized?.snapshot.ingredients ?? recipe?.data.version.ingredients ?? [],
+    [personalized, recipe],
+  );
+  const activeSteps: RecipeStep[] = useMemo(
+    () => cookingPersonalized && personalized ? personalized.snapshot.steps : recipe?.data.version.steps ?? [],
+    [cookingPersonalized, personalized, recipe],
+  );
 
   async function ensurePersonalized() {
-    if (
-      !dev ||
-      !recipe
-    ) {
-      return;
-    }
-
-    setBusy(true);
-    setError(null);
-
+    if (!dev || !recipe) return;
+    setBusy(true); setError(null);
     try {
-      const response =
-        await apiRequest<
-          PersonalizedResponse
-        >(
-          `/users/${dev.data.user.id}` +
-          `/recipes/${recipe.data.slug}` +
-          '/personalized-versions',
-          {
-            method:
-              'POST',
-          },
-        );
-
-      setPersonalized(
-        response.data,
-      );
+      const response = await apiRequest<PersonalizedResponse>(`/users/${dev.data.user.id}/recipes/${recipe.data.slug}/personalized-versions`, { method: 'POST' });
+      setPersonalized(response.data);
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : 'Không tạo được công thức cá nhân.',
-      );
-    } finally {
-      setBusy(false);
-    }
+      setError(getErrorMessage(cause, 'Chưa thể tạo công thức cá nhân lúc này.'));
+    } finally { setBusy(false); }
   }
 
-  async function startCooking(
-    usePersonalized:
-      boolean,
-  ) {
-    if (
-      !dev ||
-      !recipe
-    ) {
-      return;
-    }
-
-    setBusy(true);
-    setError(null);
-
+  async function startCooking(usePersonalized: boolean) {
+    if (!dev || !recipe) return;
+    setBusy(true); setError(null);
     try {
-      const result =
-        await apiRequest<
-          CookSessionResponse
-        >(
-          '/cook-sessions',
-          {
-            method:
-              'POST',
-
-            body:
-              JSON.stringify({
-                userId:
-                  dev
-                    .data
-                    .user
-                    .id,
-
-                recipeSlug:
-                  recipe
-                    .data
-                    .slug,
-
-                servings:
-                  personalized
-                    ?.snapshot
-                    .servings ??
-                  recipe
-                    .data
-                    .version
-                    .servings,
-
-                personalizedRecipeVersionId:
-                  usePersonalized
-                    ? personalized
-                        ?.id
-                    : undefined,
-              }),
-          },
-        );
-
-      setSession(
-        result,
-      );
-
-      setStepIndex(
-        0,
-      );
-
-      setStage(
-        'cooking',
-      );
+      const result = await apiRequest<CookSessionResponse>('/cook-sessions', {
+        method: 'POST',
+        body: JSON.stringify({
+          userId: dev.data.user.id,
+          recipeSlug: recipe.data.slug,
+          servings: personalized?.snapshot.servings ?? recipe.data.version.servings,
+          personalizedRecipeVersionId: usePersonalized ? personalized?.id : undefined,
+        }),
+      });
+      setSession(result); setStepIndex(0); setStage('cooking');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : 'Không bắt đầu được phiên nấu.',
-      );
-    } finally {
-      setBusy(false);
-    }
+      setError(getErrorMessage(cause, 'Chưa thể bắt đầu phiên nấu.'));
+    } finally { setBusy(false); }
   }
 
   async function completeCurrentStep() {
-    if (!session) {
-      return;
-    }
-
-    const step =
-      activeSteps[
-        stepIndex
-      ];
-
-    if (!step) {
-      return;
-    }
-
-    setBusy(true);
-    setError(null);
-
+    const step = activeSteps[stepIndex];
+    if (!session || !step) return;
+    setBusy(true); setError(null);
     try {
-      await apiRequest(
-        `/cook-sessions/${session.data.id}/events`,
-        {
-          method:
-            'POST',
-
-          body:
-            JSON.stringify({
-              eventType:
-                'step_completed',
-
-              clientSeq:
-                stepIndex +
-                1,
-
-              clientTime:
-                new Date()
-                  .toISOString(),
-
-              payload: {
-                stepNo:
-                  step.stepNo,
-
-                durationSeconds:
-                  step
-                    .durationSeconds,
-              },
-            }),
-        },
-      );
-
-      if (
-        stepIndex <
-        activeSteps.length -
-          1
-      ) {
-        setStepIndex(
-          (
-            current,
-          ) =>
-            current +
-            1,
-        );
+      await apiRequest(`/cook-sessions/${session.data.id}/events`, {
+        method: 'POST',
+        body: JSON.stringify({ eventType: 'step_completed', clientSeq: stepIndex + 1, clientTime: new Date().toISOString(), payload: { stepNo: step.stepNo, durationSeconds: step.durationSeconds } }),
+      });
+      if (stepIndex < activeSteps.length - 1) {
+        setStepIndex((current) => current + 1);
       } else {
-        const completed =
-          await apiRequest<
-            CookSessionResponse
-          >(
-            `/cook-sessions/${session.data.id}/complete`,
-            {
-              method:
-                'POST',
-            },
-          );
-
-        setSession(
-          completed,
-        );
-
-        setStage(
-          'feedback',
-        );
+        const completed = await apiRequest<CookSessionResponse>(`/cook-sessions/${session.data.id}/complete`, { method: 'POST' });
+        setSession(completed); setStage('feedback');
       }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : 'Không lưu được tiến độ.',
-      );
-    } finally {
-      setBusy(false);
-    }
+      setError(getErrorMessage(cause, 'Tiến độ chưa được lưu. Hãy thử lại.'));
+    } finally { setBusy(false); }
   }
 
   async function submitFeedback() {
-    if (
-      !session ||
-      !dev ||
-      !recipe
-    ) {
-      return;
-    }
-
-    setBusy(true);
-    setError(null);
-
+    if (!session || !dev || !recipe) return;
+    setBusy(true); setError(null);
     try {
-      await apiRequest(
-        `/cook-sessions/${session.data.id}/feedback`,
-        {
-          method:
-            'POST',
-
-          body:
-            JSON.stringify({
-              overallScore:
-                overall,
-
-              dimensions: {
-                saltiness,
-                garlic_onion:
-                  garlicOnion,
-                softness,
-              },
-
-              technicalFlags:
-                [],
-
-              privateNote:
-                note ||
-                undefined,
-            }),
-        },
-      );
-
-      const next =
-        await apiRequest<
-          PersonalizedResponse
-        >(
-          `/users/${dev.data.user.id}` +
-          `/recipes/${recipe.data.slug}` +
-          '/personalized-versions',
-          {
-            method:
-              'POST',
-          },
-        );
-
-      setPersonalized(
-        next.data,
-      );
-
-      setStage(
-        'done',
-      );
+      await apiRequest(`/cook-sessions/${session.data.id}/feedback`, {
+        method: 'POST',
+        body: JSON.stringify({ overallScore: overall, dimensions: { saltiness, garlic_onion: garlicOnion, softness }, technicalFlags, privateNote: note || undefined }),
+      });
+      const next = await apiRequest<PersonalizedResponse>(`/users/${dev.data.user.id}/recipes/${recipe.data.slug}/personalized-versions`, { method: 'POST' });
+      setPersonalized(next.data); setStage('done');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : 'Không lưu được phản hồi.',
-      );
-    } finally {
-      setBusy(false);
-    }
+      setError(getErrorMessage(cause, 'Phản hồi chưa được lưu. Hãy thử lại.'));
+    } finally { setBusy(false); }
+  }
+
+  function toggleFlag(flag: string) {
+    setTechnicalFlags((current) => current.includes(flag) ? current.filter((item) => item !== flag) : [...current, flag]);
   }
 
   if (error && !recipe) {
     return (
-      <main className="shell">
-        <Link
-          href="/"
-          className="backLink"
-        >
-          ← Về Bếp Nhớ
-        </Link>
-
-        <div className="errorBox">
-          {error}
-        </div>
+      <main className="shell narrowShell"><Link href="/" className="backLink">← Về Bếp Nhớ</Link>
+        <div className="stateCard errorState"><span className="stateIcon">!</span><div><strong>Không mở được công thức</strong><p>{error}</p></div><button className="button secondary" onClick={() => setReloadKey((value) => value + 1)}>Thử lại</button></div>
       </main>
     );
   }
+  if (!recipe || !dev || !base) return <LoadingRecipe />;
 
-  if (!recipe || !dev) {
+  const currentStep = activeSteps[stepIndex];
+  const taste = dev.data.tasteProfile;
+  const totalTime = (personalized?.snapshot.prepTimeMinutes ?? base.prepTimeMinutes ?? 0) + (personalized?.snapshot.cookTimeMinutes ?? base.cookTimeMinutes ?? 0);
+
+  if (stage === 'cooking' && currentStep) {
+    const progress = ((stepIndex + 1) / activeSteps.length) * 100;
     return (
-      <main className="shell">
-        <div className="loading">
-          Đang chuẩn bị món ăn…
-        </div>
-      </main>
-    );
-  }
-
-  const base =
-    recipe.data.version;
-
-  const displayVersion =
-    personalized
-      ? personalized
-          .versionNo
-      : base.versionNo;
-
-  const currentStep =
-    activeSteps[
-      stepIndex
-    ];
-
-  if (
-    stage ===
-      'cooking' &&
-    currentStep
-  ) {
-    const progress =
-      (
-        stepIndex /
-        activeSteps.length
-      ) *
-      100;
-
-    return (
-      <main className="shell">
-        <div className="cookShell">
-          <div className="smallLabel">
-            Cook Mode ·
-            {' '}
-            {session?.data
-              .recipe
-              .source ===
-            'personalized'
-              ? `Công thức cá nhân V${session.data.recipe.personalizedVersionNo}`
-              : `Công thức chuẩn V${session?.data.recipe.versionNo}`}
+      <main className="cookMode">
+        <header className="cookTopbar">
+          <Link href={`/recipes/${slug}`} className="cookBrand">BN</Link>
+          <div><span>Đang nấu</span><strong>{recipe.data.title}</strong></div>
+          <span className="pill personalized">{cookingPersonalized ? `Của bạn · V${session?.data.recipe.personalizedVersionNo}` : `Bản chuẩn · V${session?.data.recipe.versionNo}`}</span>
+        </header>
+        <div className="cookProgress"><span style={{ width: `${progress}%` }} /></div>
+        <section className="cookWorkspace">
+          <div className="cookStepMeta"><span>Bước {stepIndex + 1} / {activeSteps.length}</span><b>{Math.round(progress)}% hoàn thành</b></div>
+          <article className="cookCard">
+            <div className="stepBadge">{String(stepIndex + 1).padStart(2, '0')}</div>
+            <div className="cookCopy">
+              {currentStep.heatLevel && <div className="smallLabel">Lửa {currentStep.heatLevel}</div>}
+              <h1>{currentStep.instruction}</h1>
+              {durationText(currentStep.durationSeconds) && <div className="timerLabel"><i /> Khoảng {durationText(currentStep.durationSeconds)}</div>}
+              {currentStep.tip && <aside className="tipBox"><span>Mẹo từ Bếp Nhớ</span><p>{currentStep.tip}</p></aside>}
+              {error && <div className="inlineError" role="alert">{error}</div>}
+            </div>
+          </article>
+          <div className="cookActions">
+            <button className="button secondary" type="button" disabled={busy || stepIndex === 0} onClick={() => setStepIndex((current) => Math.max(0, current - 1))}>← Bước trước</button>
+            <button className="button cookNext" type="button" disabled={busy} onClick={() => void completeCurrentStep()}>{busy ? 'Đang lưu…' : stepIndex === activeSteps.length - 1 ? 'Hoàn thành món' : 'Xong bước này →'}</button>
           </div>
-
-          <div className="progress">
-            <div
-              className="progressBar"
-              style={{
-                width:
-                  `${progress}%`,
-              }}
-            />
-          </div>
-
-          <article className="cookCard">
-            <span className="pill brand">
-              Bước
-              {' '}
-              {stepIndex + 1}
-              /
-              {activeSteps.length}
-            </span>
-
-            <h1>
-              {recipe.data.title}
-            </h1>
-
-            {durationText(
-              currentStep
-                .durationSeconds,
-            ) && (
-              <span className="timerLabel">
-                Khoảng
-                {' '}
-                {
-                  durationText(
-                    currentStep
-                      .durationSeconds,
-                  )
-                }
-              </span>
-            )}
-
-            <div className="cookInstruction">
-              {
-                currentStep
-                  .instruction
-              }
-            </div>
-
-            {currentStep
-              .tip && (
-              <div className="successBox">
-                <strong>
-                  Mẹo nhỏ
-                </strong>
-
-                <div>
-                  {
-                    currentStep
-                      .tip
-                  }
-                </div>
-              </div>
-            )}
-
-            {error && (
-              <div
-                className="errorBox"
-                style={{
-                  marginTop:
-                    18,
-                }}
-              >
-                {error}
-              </div>
-            )}
-
-            <div className="actions">
-              <button
-                className="button"
-                type="button"
-                disabled={busy}
-                onClick={
-                  () =>
-                    void completeCurrentStep()
-                }
-              >
-                {busy
-                  ? 'Đang lưu…'
-                  : stepIndex ===
-                    activeSteps.length -
-                      1
-                    ? 'Hoàn thành món'
-                    : 'Đã xong bước này'}
-              </button>
-            </div>
-          </article>
-        </div>
+        </section>
       </main>
     );
   }
 
-  if (
-    stage ===
-    'feedback'
-  ) {
+  if (stage === 'feedback') {
     return (
-      <main className="shell">
-        <div className="cookShell">
-          <article className="cookCard">
-            <div className="smallLabel">
-              Nấu xong rồi
-            </div>
+      <main className="shell feedbackShell">
+        <div className="completionMark">✓</div>
+        <div className="smallLabel centered">Nấu xong rồi</div>
+        <h1 className="feedbackTitle">Món hôm nay thế nào?</h1>
+        <p className="feedbackLead">Chỉ mất khoảng 10 giây. Phản hồi của bạn giúp lần nấu sau vừa vị hơn.</p>
 
-            <h1>
-              Món hôm nay thế nào?
-            </h1>
+        <section className="feedbackCard">
+          <fieldset className="feedbackField scoreField"><legend>Bạn chấm món này bao nhiêu?</legend>
+            <div className="scoreChoices">{[1, 2, 3, 4, 5].map((score) => <button key={score} type="button" className={overall === score ? 'score active' : 'score'} onClick={() => setOverall(score)}><span>★</span><b>{score}</b></button>)}</div>
+          </fieldset>
+          <FeedbackChoice label="Độ mặn so với ý bạn" value={saltiness} onChange={setSaltiness} />
+          <FeedbackChoice label="Lượng hành, tỏi" value={garlicOnion} onChange={setGarlicOnion} />
+          <FeedbackChoice label="Độ mềm của món" value={softness} onChange={setSoftness} />
 
-            <p>
-              Phản hồi này sẽ được
-              dùng để cập nhật Taste
-              DNA và tạo công thức lần
-              sau.
-            </p>
+          <fieldset className="feedbackField"><legend>Có sự cố khi nấu không? <small>Không dùng để học khẩu vị</small></legend>
+            <div className="flagChoices">{[['burnt', 'Bị cháy'], ['undercooked', 'Chưa chín'], ['wrong_ingredient', 'Đổi nguyên liệu']].map(([flag, label]) => <button key={flag} type="button" className={technicalFlags.includes(flag) ? 'flag active' : 'flag'} onClick={() => toggleFlag(flag)}>{technicalFlags.includes(flag) ? '✓ ' : '+ '}{label}</button>)}</div>
+          </fieldset>
 
-            <div className="feedbackGrid">
-              <div className="sliderRow">
-                <div className="sliderHead">
-                  <span>
-                    Điểm tổng thể
-                  </span>
-
-                  <span>
-                    {overall}/5
-                  </span>
-                </div>
-
-                <input
-                  type="range"
-                  min="1"
-                  max="5"
-                  step="0.5"
-                  value={overall}
-                  onChange={
-                    (
-                      event,
-                    ) =>
-                      setOverall(
-                        Number(
-                          event
-                            .target
-                            .value,
-                        ),
-                      )
-                  }
-                />
-              </div>
-
-              <TasteSlider
-                label="Độ mặn"
-                left="Muốn nhạt hơn"
-                right="Muốn đậm hơn"
-                value={saltiness}
-                onChange={
-                  setSaltiness
-                }
-              />
-
-              <TasteSlider
-                label="Hành / tỏi"
-                left="Ít hơn"
-                right="Nhiều hơn"
-                value={
-                  garlicOnion
-                }
-                onChange={
-                  setGarlicOnion
-                }
-              />
-
-              <TasteSlider
-                label="Độ mềm"
-                left="Chắc hơn"
-                right="Mềm hơn"
-                value={softness}
-                onChange={
-                  setSoftness
-                }
-              />
-
-              <div>
-                <div
-                  className="sliderHead"
-                  style={{
-                    marginBottom:
-                      8,
-                  }}
-                >
-                  Ghi chú riêng
-                </div>
-
-                <textarea
-                  value={note}
-                  placeholder="Ví dụ: lần sau muốn bớt mặn một chút…"
-                  onChange={
-                    (
-                      event,
-                    ) =>
-                      setNote(
-                        event
-                          .target
-                          .value,
-                      )
-                  }
-                />
-              </div>
-            </div>
-
-            {error && (
-              <div
-                className="errorBox"
-                style={{
-                  marginTop:
-                    18,
-                }}
-              >
-                {error}
-              </div>
-            )}
-
-            <div className="actions">
-              <button
-                className="button green"
-                type="button"
-                disabled={busy}
-                onClick={
-                  () =>
-                    void submitFeedback()
-                }
-              >
-                {busy
-                  ? 'Bếp Nhớ đang học…'
-                  : 'Lưu khẩu vị của tôi'}
-              </button>
-            </div>
-          </article>
-        </div>
+          <label className="noteField"><span>Ghi chú riêng <small>Không bắt buộc</small></span><textarea value={note} maxLength={2000} placeholder="Ví dụ: lần sau thêm chút tiêu, kho cạn hơn…" onChange={(event) => setNote(event.target.value)} /></label>
+          {error && <div className="inlineError" role="alert">{error}</div>}
+          <button className="button feedbackSubmit" type="button" disabled={busy} onClick={() => void submitFeedback()}>{busy ? 'Bếp Nhớ đang học…' : 'Lưu và xem Bếp Nhớ đã học gì →'}</button>
+        </section>
       </main>
     );
   }
 
-  if (
-    stage ===
-    'done'
-  ) {
+  if (stage === 'done') {
+    const adjustments = personalized?.snapshot.adjustments ?? [];
     return (
-      <main className="shell">
-        <div className="cookShell">
-          <article className="cookCard">
-            <div className="smallLabel">
-              Bếp Nhớ đã học thêm
-            </div>
-
-            <h1>
-              Công thức V
-              {
-                personalized
-                  ?.versionNo
-              }
-              {' '}
-              đã sẵn sàng.
-            </h1>
-
-            <div className="successBox">
-              Taste DNA đã được cập
-              nhật từ lần nấu vừa rồi.
-
-              {personalized &&
-               personalized
-                 .snapshot
-                 .adjustments
-                 .length >
-                 0 && (
-                <div className="adjustmentList">
-                  {personalized
-                    .snapshot
-                    .adjustments
-                    .map(
-                      (
-                        item,
-                      ) => (
-                        <div
-                          key={
-                            item
-                              .ingredientSlug
-                          }
-                          className="adjustmentItem"
-                        >
-                          <span>
-                            {
-                              item
-                                .ingredientName
-                            }
-                          </span>
-
-                          <strong>
-                            {
-                              formatQuantity(
-                                item
-                                  .quantity,
-                              )
-                            }
-                            {' '}
-                            {
-                              item
-                                .unit
-                            }
-                            {' '}
-                            (
-                            {
-                              item
-                                .deltaPercent >
-                              0
-                                ? '+'
-                                : ''
-                            }
-                            {
-                              item
-                                .deltaPercent
-                            }
-                            %)
-                          </strong>
-                        </div>
-                      ),
-                    )}
-                </div>
-              )}
-            </div>
-
-            <div className="actions">
-              <button
-                type="button"
-                className="button"
-                onClick={
-                  () => {
-                    setSession(
-                      null,
-                    );
-
-                    setStepIndex(
-                      0,
-                    );
-
-                    setStage(
-                      'detail',
-                    );
-                  }
-                }
-              >
-                Xem công thức mới
-              </button>
-
-              <Link
-                href="/"
-                className="button secondary"
-              >
-                Về danh sách món
-              </Link>
-            </div>
-          </article>
-        </div>
+      <main className="shell resultShell">
+        <div className="resultHero"><div className="completionMark">✓</div><div className="smallLabel light centered">Bếp Nhớ đã học thêm</div><h1>Phiên bản tiếp theo đã sẵn sàng.</h1><p>Taste DNA được cập nhật từ lần nấu vừa rồi. Mọi thay đổi đều có giới hạn và công thức cũ vẫn được giữ nguyên.</p></div>
+        <section className="learningCard">
+          <div className="learningHead"><div><span className="pill personalized">Công thức của bạn · V{personalized?.versionNo}</span><h2>Những gì sẽ thay đổi lần sau</h2></div><div className="maturityMini"><strong>{Math.round((personalized?.snapshot.tasteEvidence.maturityScore ?? 0) * 100)}%</strong><span>Độ trưởng thành</span></div></div>
+          {adjustments.length > 0 ? <div className="adjustmentList">{adjustments.map((item) => <div key={item.ingredientSlug} className="adjustmentItem"><div><strong>{item.ingredientName}</strong><span>Từ {formatQuantity(item.baseQuantity)} {item.unit}</span></div><div className="adjustmentValue"><strong>{formatQuantity(item.quantity)} {item.unit}</strong><span>{item.deltaPercent > 0 ? '+' : ''}{item.deltaPercent}%</span></div></div>)}</div> : <div className="noAdjustment"><strong>Giữ nguyên công thức hiện tại</strong><p>Tín hiệu còn mới hoặc món đã vừa vị. Bếp Nhớ sẽ tiếp tục quan sát trước khi điều chỉnh.</p></div>}
+          <p className="evidenceNote">Dựa trên {personalized?.snapshot.tasteEvidence.sampleCount ?? 0} lần nấu · Thuật toán {personalized?.algorithmVersion}</p>
+        </section>
+        <div className="resultActions"><button className="button" type="button" onClick={() => { setSession(null); setStepIndex(0); setStage('detail'); }}>Xem công thức mới</button><Link href="/" className="button secondary">Chọn món khác</Link></div>
       </main>
     );
   }
 
+  const adjustments = personalized?.snapshot.adjustments ?? [];
   return (
-    <main className="shell">
-      <Link
-        href="/"
-        className="backLink"
-      >
-        ← Danh sách món
-      </Link>
-
-      <section className="detailHeader">
-        <div>
-          <div className="smallLabel">
-            Món Việt ·
-            {' '}
-            {personalized
-              ? 'Đã cá nhân hóa'
-              : 'Công thức chuẩn'}
+    <main className="shell detailShell">
+      <header className="detailNav"><Link href="/" className="backLink">← Về sổ công thức</Link><span className="statusDot"><i /> Công thức đã kiểm chứng</span></header>
+      <section className="detailHero">
+        <div className="detailCopy">
+          <div className="eyebrow"><span /> Món Việt · {personalized ? 'Đã được Bếp Nhớ điều chỉnh' : 'Công thức chuẩn'}</div>
+          <h1>{recipe.data.title}</h1>
+          <p>{personalized?.snapshot.summary ?? base.summary}</p>
+          <div className="detailStats"><span><b>{totalTime}</b> phút</span><span><b>{personalized?.snapshot.servings ?? base.servings}</b> phần ăn</span><span><b>{base.steps.length}</b> bước nấu</span></div>
+          <div className="actions primaryActions">
+            {personalized ? <button type="button" className="button" disabled={busy} onClick={() => void startCooking(true)}>Bắt đầu nấu bản của tôi →</button> : <button type="button" className="button" disabled={busy} onClick={() => void ensurePersonalized()}>{busy ? 'Đang lắng nghe khẩu vị…' : 'Tạo công thức cho tôi →'}</button>}
+            <button type="button" className="button secondary" disabled={busy} onClick={() => void startCooking(false)}>Nấu bản chuẩn</button>
           </div>
-
-          <h1>
-            {recipe.data.title}
-          </h1>
-
-          <p>
-            {personalized
-              ?.snapshot
-              .summary ??
-              base.summary}
-          </p>
-
-          <div className="recipeMeta">
-            <span className="pill personalized">
-              {personalized
-                ? `Dành cho bạn · V${displayVersion}`
-                : `V${displayVersion}`}
-            </span>
-
-            <span className="pill">
-              {
-                personalized
-                  ?.snapshot
-                  .servings ??
-                base.servings
-              }
-              {' '}
-              phần
-            </span>
-
-            <span className="pill">
-              {
-                (
-                  personalized
-                    ?.snapshot
-                    .prepTimeMinutes ??
-                  base
-                    .prepTimeMinutes ??
-                  0
-                ) +
-                (
-                  personalized
-                    ?.snapshot
-                    .cookTimeMinutes ??
-                  base
-                    .cookTimeMinutes ??
-                  0
-                )
-              }
-              {' '}
-              phút
-            </span>
-          </div>
-
-          <div className="actions">
-            {personalized ? (
-              <button
-                type="button"
-                className="button"
-                disabled={busy}
-                onClick={
-                  () =>
-                    void startCooking(
-                      true,
-                    )
-                }
-              >
-                Nấu phiên bản của tôi
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="button green"
-                disabled={busy}
-                onClick={
-                  () =>
-                    void ensurePersonalized()
-                }
-              >
-                {busy
-                  ? 'Đang cá nhân hóa…'
-                  : 'Tạo công thức cho tôi'}
-              </button>
-            )}
-
-            <button
-              type="button"
-              className="button secondary"
-              disabled={busy}
-              onClick={
-                () =>
-                  void startCooking(
-                    false,
-                  )
-              }
-            >
-              Nấu công thức chuẩn
-            </button>
-
-            {personalized && (
-              <button
-                type="button"
-                className="button secondary"
-                disabled={busy}
-                onClick={
-                  () =>
-                    void ensurePersonalized()
-                }
-              >
-                Làm mới theo Taste DNA
-              </button>
-            )}
-          </div>
-
-          {error && (
-            <div
-              className="errorBox"
-              style={{
-                marginTop:
-                  18,
-              }}
-            >
-              {error}
-            </div>
-          )}
+          {error && <div className="inlineError" role="alert">{error}</div>}
         </div>
-
-        <div>
-          <div className="tasteCard">
-            <div className="smallLabel">
-              Taste DNA
-            </div>
-
-            <strong>
-              {dev.data
-                .tasteProfile
-                ? `${Math.round(
-                    dev.data
-                      .tasteProfile
-                      .maturityScore *
-                      100,
-                  )}%`
-                : '—'}
-            </strong>
-
-            <p>
-              {dev.data
-                .tasteProfile
-                ? `${dev.data.tasteProfile.sampleCount} lần nấu đã học`
-                : 'Chưa có dữ liệu'}
-            </p>
-          </div>
-        </div>
+        <aside className="detailVisual">
+          <span className="heroBowl" aria-hidden="true"><i /><i /><i /></span>
+          <div className="versionSeal"><small>{personalized ? 'Phiên bản của bạn' : 'Phiên bản chuẩn'}</small><strong>V{personalized?.versionNo ?? base.versionNo}</strong></div>
+        </aside>
       </section>
 
+      {personalized && (
+        <section className="personalizationBanner">
+          <div><div className="smallLabel light">Bếp Nhớ đã chỉnh cho bạn</div><h2>{adjustments.length > 0 ? `${adjustments.length} nguyên liệu được tinh chỉnh vừa đủ` : 'Công thức này đang hợp khẩu vị của bạn'}</h2><p>Dựa trên {personalized.snapshot.tasteEvidence.sampleCount} lần nấu · độ trưởng thành Taste DNA {Math.round(personalized.snapshot.tasteEvidence.maturityScore * 100)}%</p></div>
+          <div className="miniDiffs">{adjustments.slice(0, 3).map((item) => <span key={item.ingredientSlug}><b>{item.ingredientName}</b><i>{item.deltaPercent > 0 ? '+' : ''}{item.deltaPercent}%</i></span>)}</div>
+          <button className="textButton" type="button" disabled={busy} onClick={() => void ensurePersonalized()}>{busy ? 'Đang cập nhật…' : 'Làm mới theo Taste DNA'}</button>
+        </section>
+      )}
+
       <div className="contentGrid">
-        <section className="panel">
-          <h2>
-            Nguyên liệu
-          </h2>
-
-          <ul className="ingredientList">
-            {visibleIngredients.map(
-              (
-                ingredient,
-              ) => {
-                const item =
-                  ingredient as
-                    RecipeIngredient & {
-                      baseQuantity?:
-                        number;
-
-                      personalized?:
-                        boolean;
-
-                      deltaPercent?:
-                        number;
-                    };
-
-                const quantity =
-                  'baseQuantity'
-                  in item
-                    ? (
-                        item as unknown as {
-                          quantity:
-                            number;
-                        }
-                      ).quantity
-                    : item
-                        .quantity;
-
-                return (
-                  <li
-                    key={
-                      item.id
-                    }
-                    className="ingredient"
-                  >
-                    <div>
-                      <strong>
-                        {
-                          item.name
-                        }
-                      </strong>
-
-                      {item.preparation && (
-                        <div className="smallLabel">
-                          {
-                            item
-                              .preparation
-                          }
-                        </div>
-                      )}
-                    </div>
-
-                    <div
-                      className={
-                        item
-                          .personalized
-                          ? 'ingredientAmount adjusted'
-                          : 'ingredientAmount'
-                      }
-                    >
-                      {item
-                        .personalized &&
-                       item
-                         .baseQuantity !==
-                         undefined && (
-                        <span className="baseAmount">
-                          {
-                            formatQuantity(
-                              item
-                                .baseQuantity,
-                            )
-                          }
-                        </span>
-                      )}
-
-                      {
-                        formatQuantity(
-                          quantity,
-                        )
-                      }
-                      {' '}
-                      {item.unit}
-                    </div>
-                  </li>
-                );
-              },
-            )}
-          </ul>
+        <section className="panel ingredientPanel"><div className="panelTitle"><div><span>01</span><h2>Chuẩn bị nguyên liệu</h2></div><small>{visibleIngredients.length} thứ</small></div>
+          <ul className="ingredientList">{visibleIngredients.map((item) => {
+            const adjusted = 'personalized' in item && item.personalized;
+            return <li key={item.id} className="ingredient"><div><strong>{item.name}</strong>{item.preparation && <span>{item.preparation}</span>}</div><div className={adjusted ? 'ingredientAmount adjusted' : 'ingredientAmount'}>{adjusted && <small>{formatQuantity(item.baseQuantity)}</small>}<b>{formatQuantity(item.quantity)} {item.unit}</b></div></li>;
+          })}</ul>
         </section>
-
-        <section className="panel">
-          <h2>
-            Các bước nấu
-          </h2>
-
-          <ol className="stepList">
-            {(personalized
-              ?.snapshot
-              .steps ??
-              base.steps
-            ).map(
-              (step) => (
-                <li
-                  key={
-                    step.stepNo
-                  }
-                  className="stepItem"
-                >
-                  <span className="stepNumber">
-                    {
-                      step
-                        .stepNo
-                    }
-                  </span>
-
-                  <div>
-                    <p>
-                      {
-                        step
-                          .instruction
-                      }
-                    </p>
-
-                    {step.tip && (
-                      <div className="tip">
-                        Mẹo:
-                        {' '}
-                        {
-                          step
-                            .tip
-                        }
-                      </div>
-                    )}
-                  </div>
-                </li>
-              ),
-            )}
-          </ol>
+        <section className="panel stepPanel"><div className="panelTitle"><div><span>02</span><h2>Từng bước vào bếp</h2></div><small>{base.steps.length} bước</small></div>
+          <ol className="stepList">{(personalized?.snapshot.steps ?? base.steps).map((step) => <li key={step.stepNo} className="stepItem"><span className="stepNumber">{String(step.stepNo).padStart(2, '0')}</span><div><p>{step.instruction}</p><div className="stepMeta">{durationText(step.durationSeconds) && <span>{durationText(step.durationSeconds)}</span>}{step.heatLevel && <span>Lửa {step.heatLevel}</span>}</div>{step.tip && <aside className="tip"><b>Mẹo</b> {step.tip}</aside>}</div></li>)}</ol>
         </section>
       </div>
-
-      <div className="footerNote">
-        Công thức cá nhân hóa được tạo
-        bằng deterministic Taste Engine
-        và luôn giữ lại version đã nấu.
-      </div>
+      <div className="stickyCook"><div><strong>{personalized ? `Bản của bạn · V${personalized.versionNo}` : `Bản chuẩn · V${base.versionNo}`}</strong><span>{totalTime} phút · {personalized?.snapshot.servings ?? base.servings} phần</span></div><button className="button" disabled={busy} onClick={() => void startCooking(Boolean(personalized))}>Bắt đầu nấu →</button></div>
+      <footer className="detailFooter">Công thức cá nhân hóa bằng deterministic Taste Engine · Luôn giữ đúng phiên bản đã nấu</footer>
     </main>
   );
 }

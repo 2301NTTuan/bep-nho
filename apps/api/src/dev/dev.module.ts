@@ -2,9 +2,7 @@ import {
   Module,
 } from '@nestjs/common';
 
-import {
-  DatabaseModule,
-} from '../database/database.module';
+import { IdentityModule } from '../identity/identity.module';
 
 import {
   DevController,
@@ -12,7 +10,7 @@ import {
 
 @Module({
   imports: [
-    DatabaseModule,
+    IdentityModule,
   ],
 
   controllers: [

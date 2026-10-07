@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { apiRequest, getErrorMessage } from '../lib/api';
-import type { DevBootstrapResponse, RecipeListResponse } from '../lib/types';
+import { loadCurrentUser } from '../lib/current-user';
+import type { CurrentUserContext } from '../lib/current-user';
+import type { RecipeListResponse } from '../lib/types';
 
 function Brand() {
   return (
@@ -16,7 +18,7 @@ function Brand() {
 
 export default function Home() {
   const [recipes, setRecipes] = useState<RecipeListResponse | null>(null);
-  const [dev, setDev] = useState<DevBootstrapResponse | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUserContext | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -26,13 +28,13 @@ export default function Home() {
     async function load() {
       setError(null);
       try {
-        const [recipeData, devData] = await Promise.all([
+        const [recipeData, userContext] = await Promise.all([
           apiRequest<RecipeListResponse>('/recipes?limit=24'),
-          apiRequest<DevBootstrapResponse>('/dev/bootstrap'),
+          loadCurrentUser(),
         ]);
         if (active) {
           setRecipes(recipeData);
-          setDev(devData);
+          setCurrentUser(userContext);
         }
       } catch (cause) {
         if (active) setError(getErrorMessage(cause, 'Không mở được sổ công thức.'));
@@ -43,7 +45,7 @@ export default function Home() {
     return () => { active = false; };
   }, [reloadKey]);
 
-  const taste = dev?.data.tasteProfile;
+  const taste = currentUser?.tasteProfile;
 
   return (
     <main className="shell homeShell">

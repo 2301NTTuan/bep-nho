@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiRequestError, apiRequest, getErrorMessage } from '../../../lib/api';
+import { loadCurrentUser } from '../../../lib/current-user';
+import type { CurrentUserContext } from '../../../lib/current-user';
 import type {
   CookSessionResponse,
-  DevBootstrapResponse,
   PersonalizedIngredient,
   PersonalizedResponse,
   PersonalizedVersion,
@@ -57,7 +58,7 @@ function LoadingRecipe() {
 export default function RecipePage() {
   const { slug } = useParams<{ slug: string }>();
   const [recipe, setRecipe] = useState<RecipeDetailResponse | null>(null);
-  const [dev, setDev] = useState<DevBootstrapResponse | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUserContext | null>(null);
   const [personalized, setPersonalized] = useState<PersonalizedVersion | null>(null);
   const [session, setSession] = useState<CookSessionResponse | null>(null);
   const [stage, setStage] = useState<Stage>('detail');
@@ -77,15 +78,15 @@ export default function RecipePage() {
     async function load() {
       setError(null);
       try {
-        const [recipeData, devData] = await Promise.all([
+        const [recipeData, userContext] = await Promise.all([
           apiRequest<RecipeDetailResponse>(`/recipes/${slug}`),
-          apiRequest<DevBootstrapResponse>('/dev/bootstrap'),
+          loadCurrentUser(),
         ]);
         if (!active) return;
         setRecipe(recipeData);
-        setDev(devData);
+        setCurrentUser(userContext);
         try {
-          const latest = await apiRequest<PersonalizedResponse>(`/users/${devData.data.user.id}/recipes/${slug}/personalized-versions/latest`);
+          const latest = await apiRequest<PersonalizedResponse>(`/users/${userContext.user.id}/recipes/${slug}/personalized-versions/latest`);
           if (active) setPersonalized(latest.data);
         } catch (cause) {
           if (!(cause instanceof ApiRequestError && cause.status === 404)) throw cause;
@@ -110,10 +111,10 @@ export default function RecipePage() {
   );
 
   async function ensurePersonalized() {
-    if (!dev || !recipe) return;
+    if (!currentUser || !recipe) return;
     setBusy(true); setError(null);
     try {
-      const response = await apiRequest<PersonalizedResponse>(`/users/${dev.data.user.id}/recipes/${recipe.data.slug}/personalized-versions`, { method: 'POST' });
+      const response = await apiRequest<PersonalizedResponse>(`/users/${currentUser.user.id}/recipes/${recipe.data.slug}/personalized-versions`, { method: 'POST' });
       setPersonalized(response.data);
     } catch (cause) {
       setError(getErrorMessage(cause, 'Chưa thể tạo công thức cá nhân lúc này.'));
@@ -121,13 +122,13 @@ export default function RecipePage() {
   }
 
   async function startCooking(usePersonalized: boolean) {
-    if (!dev || !recipe) return;
+    if (!currentUser || !recipe) return;
     setBusy(true); setError(null);
     try {
       const result = await apiRequest<CookSessionResponse>('/cook-sessions', {
         method: 'POST',
         body: JSON.stringify({
-          userId: dev.data.user.id,
+          userId: currentUser.user.id,
           recipeSlug: recipe.data.slug,
           servings: personalized?.snapshot.servings ?? recipe.data.version.servings,
           personalizedRecipeVersionId: usePersonalized ? personalized?.id : undefined,
@@ -162,14 +163,14 @@ export default function RecipePage() {
   }
 
   async function submitFeedback() {
-    if (!session || !dev || !recipe) return;
+    if (!session || !currentUser || !recipe) return;
     setBusy(true); setError(null);
     try {
       await apiRequest(`/cook-sessions/${session.data.id}/feedback`, {
         method: 'POST',
         body: JSON.stringify({ overallScore: overall, dimensions: { saltiness, garlic_onion: garlicOnion, softness }, technicalFlags, privateNote: note || undefined }),
       });
-      const next = await apiRequest<PersonalizedResponse>(`/users/${dev.data.user.id}/recipes/${recipe.data.slug}/personalized-versions`, { method: 'POST' });
+      const next = await apiRequest<PersonalizedResponse>(`/users/${currentUser.user.id}/recipes/${recipe.data.slug}/personalized-versions`, { method: 'POST' });
       setPersonalized(next.data); setStage('done');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (cause) {
@@ -188,10 +189,9 @@ export default function RecipePage() {
       </main>
     );
   }
-  if (!recipe || !dev || !base) return <LoadingRecipe />;
+  if (!recipe || !currentUser || !base) return <LoadingRecipe />;
 
   const currentStep = activeSteps[stepIndex];
-  const taste = dev.data.tasteProfile;
   const totalTime = (personalized?.snapshot.prepTimeMinutes ?? base.prepTimeMinutes ?? 0) + (personalized?.snapshot.cookTimeMinutes ?? base.cookTimeMinutes ?? 0);
 
   if (stage === 'cooking' && currentStep) {

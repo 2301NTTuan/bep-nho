@@ -32,7 +32,9 @@ import { DevModule } from './dev/dev.module';
     CookSessionsModule,
     FeedbackModule,
     PersonalizationModule,
-    DevModule,
+    ...(process.env.NODE_ENV === 'production'
+      ? []
+      : [DevModule]),
   ],
 })
 export class AppModule {}

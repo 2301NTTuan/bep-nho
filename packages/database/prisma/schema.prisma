@@ -100,15 +100,16 @@ model CookEvent {
 }
 
 model CookFeedback {
-  id             String      @id @default(uuid()) @db.Uuid
-  cookSessionId  String      @unique @map("cook_session_id") @db.Uuid
-  overallScore   Decimal?    @map("overall_score") @db.Decimal(3, 1)
-  dimensionJson  Json        @map("dimension_json")
-  technicalFlags Json        @map("technical_flags")
-  privateNote    String?     @map("private_note")
-  revisionNo     Int         @default(1) @map("revision_no")
-  submittedAt    DateTime    @default(now()) @map("submitted_at") @db.Timestamptz(6)
-  cookSession    CookSession @relation(fields: [cookSessionId], references: [id])
+  id             String        @id @default(uuid()) @db.Uuid
+  cookSessionId  String        @unique @map("cook_session_id") @db.Uuid
+  overallScore   Decimal?      @map("overall_score") @db.Decimal(3, 1)
+  dimensionJson  Json          @map("dimension_json")
+  technicalFlags Json          @map("technical_flags")
+  privateNote    String?       @map("private_note")
+  revisionNo     Int           @default(1) @map("revision_no")
+  submittedAt    DateTime      @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  cookSession    CookSession   @relation(fields: [cookSessionId], references: [id])
+  tasteSignals   TasteSignal[]
 
   @@map("cook_feedback")
 }
@@ -125,6 +126,7 @@ model TasteProfile {
   signals                    TasteSignal[]
   personalizedRecipeVersions PersonalizedRecipeVersion[]
 
+  @@unique([userId, algorithmVersion])
   @@index([userId])
   @@map("taste_profiles")
 }
@@ -146,18 +148,21 @@ model TasteDimension {
 }
 
 model TasteSignal {
-  id             String       @id @default(uuid()) @db.Uuid
-  tasteProfileId String       @map("taste_profile_id") @db.Uuid
-  dimensionKey   String       @map("dimension_key") @db.VarChar(64)
-  signalValue    Decimal      @map("signal_value") @db.Decimal(6, 5)
-  sourceType     String       @map("source_type") @db.VarChar(32)
-  baseWeight     Decimal      @map("base_weight") @db.Decimal(7, 4)
-  qualityFactor  Decimal      @map("quality_factor") @db.Decimal(6, 5)
-  excludedReason String?      @map("excluded_reason") @db.VarChar(120)
-  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  tasteProfile   TasteProfile @relation(fields: [tasteProfileId], references: [id])
+  id             String        @id @default(uuid()) @db.Uuid
+  tasteProfileId String        @map("taste_profile_id") @db.Uuid
+  cookFeedbackId String?       @map("cook_feedback_id") @db.Uuid
+  dimensionKey   String        @map("dimension_key") @db.VarChar(64)
+  signalValue    Decimal       @map("signal_value") @db.Decimal(6, 5)
+  sourceType     String        @map("source_type") @db.VarChar(32)
+  baseWeight     Decimal       @map("base_weight") @db.Decimal(7, 4)
+  qualityFactor  Decimal       @map("quality_factor") @db.Decimal(6, 5)
+  excludedReason String?       @map("excluded_reason") @db.VarChar(120)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  tasteProfile   TasteProfile  @relation(fields: [tasteProfileId], references: [id])
+  cookFeedback   CookFeedback? @relation(fields: [cookFeedbackId], references: [id], onDelete: Restrict)
 
   @@index([tasteProfileId, dimensionKey, createdAt])
+  @@index([cookFeedbackId])
   @@map("taste_signals")
 }
 

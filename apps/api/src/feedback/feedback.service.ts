@@ -32,6 +32,18 @@ function clamp(
   );
 }
 
+function encodeExclusionReasons(
+  flags: string[],
+): string | null {
+  if (flags.length === 0) {
+    return null;
+  }
+
+  return JSON.stringify(
+    [...new Set(flags)].sort(),
+  );
+}
+
 @Injectable()
 export class FeedbackService {
   constructor(
@@ -99,47 +111,24 @@ export class FeedbackService {
       );
     }
 
-    const result =
-      await this.prisma
+    let result: {
+      feedback: {
+        id: string;
+        cookSessionId: string;
+        overallScore: Prisma.Decimal | null;
+        dimensionJson: Prisma.JsonValue;
+        technicalFlags: Prisma.JsonValue;
+        privateNote: string | null;
+        revisionNo: number;
+        submittedAt: Date;
+      };
+      profileId: string;
+    };
+
+    try {
+      result = await this.prisma
         .$transaction(
           async (tx) => {
-            let profile =
-              await tx.tasteProfile
-                .findFirst({
-                  where: {
-                    userId:
-                      session.userId,
-
-                    algorithmVersion:
-                      ALGORITHM_VERSION,
-                  },
-
-                  orderBy: {
-                    computedAt:
-                      'desc',
-                  },
-                });
-
-            if (!profile) {
-              profile =
-                await tx.tasteProfile
-                  .create({
-                    data: {
-                      userId:
-                        session.userId,
-
-                      algorithmVersion:
-                        ALGORITHM_VERSION,
-
-                      maturityScore:
-                        0,
-
-                      sampleCount:
-                        0,
-                    },
-                  });
-            }
-
             const feedback =
               await tx.cookFeedback
                 .create({
@@ -170,7 +159,36 @@ export class FeedbackService {
                 });
 
             const exclusionReason =
-              dto.technicalFlags?.[0] ?? null;
+              encodeExclusionReasons(
+                dto.technicalFlags ?? [],
+              );
+
+            const profileLockKey =
+              `taste-profile:${session.userId}:${ALGORITHM_VERSION}`;
+
+            await tx.$queryRaw`
+              SELECT pg_advisory_xact_lock(
+                hashtextextended(${profileLockKey}, 0)
+              ) IS NULL AS locked
+            `;
+
+            let profile =
+              await tx.tasteProfile
+                .upsert({
+                  where: {
+                    userId_algorithmVersion: {
+                      userId: session.userId,
+                      algorithmVersion: ALGORITHM_VERSION,
+                    },
+                  },
+                  update: {},
+                  create: {
+                    userId: session.userId,
+                    algorithmVersion: ALGORITHM_VERSION,
+                    maturityScore: 0,
+                    sampleCount: 0,
+                  },
+                });
 
             for (
               const [
@@ -185,6 +203,7 @@ export class FeedbackService {
                 await tx.tasteSignal.create({
                   data: {
                     tasteProfileId: profile.id,
+                    cookFeedbackId: feedback.id,
                     dimensionKey,
                     signalValue,
                     sourceType: 'cook_feedback',
@@ -272,6 +291,9 @@ export class FeedbackService {
                     tasteProfileId:
                       profile.id,
 
+                    cookFeedbackId:
+                      feedback.id,
+
                     dimensionKey,
 
                     signalValue,
@@ -345,35 +367,23 @@ export class FeedbackService {
                 });
             }
 
-            const nextProfileSamples =
-              profile.sampleCount +
-              (exclusionReason ? 0 : 1);
+            if (!exclusionReason) {
+              const nextProfileSamples =
+                profile.sampleCount + 1;
 
-            const maturityScore =
-              Math.min(
-                1,
-                nextProfileSamples /
-                  10,
-              );
-
-            profile =
-              await tx.tasteProfile
-                .update({
-                  where: {
-                    id:
-                      profile.id,
-                  },
-
-                  data: {
-                    sampleCount:
-                      nextProfileSamples,
-
-                    maturityScore,
-
-                    computedAt:
-                      new Date(),
-                  },
-                });
+              profile =
+                await tx.tasteProfile
+                  .update({
+                    where: {
+                      id: profile.id,
+                    },
+                    data: {
+                      sampleCount: nextProfileSamples,
+                      maturityScore: Math.min(1, nextProfileSamples / 10),
+                      computedAt: new Date(),
+                    },
+                  });
+            }
 
             return {
               feedback,
@@ -382,6 +392,25 @@ export class FeedbackService {
             };
           },
         );
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const duplicate = await this.prisma.cookFeedback.findUnique({
+          where: { cookSessionId },
+          select: { id: true },
+        });
+
+        if (duplicate) {
+          throw new ConflictException(
+            'Feedback already exists for this cook session',
+          );
+        }
+      }
+
+      throw error;
+    }
 
     const profile =
       await this.getTasteProfile(
@@ -454,17 +483,12 @@ export class FeedbackService {
     const profile =
       await this.prisma
         .tasteProfile
-        .findFirst({
+        .findUnique({
           where: {
-            userId,
-
-            algorithmVersion:
-              ALGORITHM_VERSION,
-          },
-
-          orderBy: {
-            computedAt:
-              'desc',
+            userId_algorithmVersion: {
+              userId,
+              algorithmVersion: ALGORITHM_VERSION,
+            },
           },
 
           include: {

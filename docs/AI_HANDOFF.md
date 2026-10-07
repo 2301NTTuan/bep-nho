@@ -81,3 +81,15 @@
 - `pnpm build`: pass, 6/6 workspace tasks including web, API, and admin production builds.
 - Runtime smoke checks: production API health 200; production `/v1/dev/bootstrap` 404; development validation errors and request-ID propagation verified.
 - Final gate log: `/mnt/d/bep_nho_outputs/codex/final-gates-2026-10-07.log` (outside Git).
+
+## 2026-10-07 — Phase 5.5: Core hardening
+
+- Commits: `ecea024` data integrity; `18c7598` cooking/API concurrency; `9a979c2` personalization generation; `5c66203` explicit feedback UX; `bde7187` concurrency/provenance tests.
+- Migration: `20261007170000_core_hardening` adds unique `(user_id, algorithm_version)` TasteProfile identity and nullable `TasteSignal.cook_feedback_id` with an audit-preserving `ON DELETE RESTRICT` FK. The pre-migration duplicate audit returned zero rows; no data was deleted or merged.
+- Fixed: concurrent profile creation, duplicate feedback P2002 leakage/double-learning risk, personalized version races, duplicate completion increments, implicit neutral taste answers, incomplete technical-failure reasons, missing signal provenance, evidence-sensitive content hashes, unsupported “verified” copy, inconsistent serving overrides, and production bootstrap defense-in-depth.
+- Decisions: advisory transaction locks are narrowly scoped to a taste-profile identity or user-recipe version stream; excluded reasons use a sorted JSON string in the existing 120-character field (all currently allowed flags fit, avoiding another schema column); effective content hash includes algorithm version, servings/times/summary, ordered ingredients, and ordered steps but excludes evidence metadata; serving scaling remains Phase 7.
+- Tests: 6 PostgreSQL integration scenarios plus 3 focused HTTP scenarios cover all concurrency, explicit/omitted feedback, exclusion, provenance, version reuse/change, historical binding, standardized conflict, and dev/prod bootstrap requirements. Fixtures are uniquely named and self-cleaning.
+- Final gates: migration status current (5 migrations); `pnpm db:validate` pass on Prisma 6.19.3; `pnpm typecheck` 6/6; `pnpm test` 7/7 workspace tasks with API 2 suites/9 tests; `pnpm build` 6/6. Post-test audit found zero hardening fixtures and zero duplicate taste-profile identities.
+- Remaining issues: real authentication/ownership, ingredient-aware scaling, browser/a11y automation, and broader production operations remain intentionally out of scope.
+- Recommended next phase: Phase 6 Auth and ownership boundary. Do not begin it automatically from this handoff.
+- Final log: `/mnt/d/bep_nho_outputs/codex/phase-5.5-final-gates-2026-10-07.log` (outside Git).

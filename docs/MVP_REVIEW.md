@@ -19,7 +19,7 @@ The web experience now presents this loop coherently on desktop and mobile. It i
 
 - Real sign-in, session management, ownership checks, and account lifecycle are absent. Current user IDs in mutation URLs/bodies are not a production authorization model.
 - Content depth is insufficient: there is one development recipe explicitly awaiting culinary review, with no production media or editorial workflow.
-- Serving selection does not yet rescale the ingredient snapshot with ingredient-aware culinary rules.
+- Arbitrary serving overrides are intentionally disabled until ingredient-aware culinary scaling is implemented in Phase 7; every session now uses the servings from the exact canonical/personalized snapshot cooked.
 - Cook Mode is online-only; timers are informational and session resume/offline event queueing are not implemented.
 - Users see generated adjustments but cannot explicitly accept, reject, edit, or pin “My Best Version” before future use.
 - Taste DNA has no dedicated history/control screen for explanations, overrides, or reset.
@@ -30,7 +30,7 @@ The web experience now presents this loop coherently on desktop and mobile. It i
 - API contracts are shared TypeScript definitions, not generated from an OpenAPI source of truth.
 - Domain rules still live mainly in NestJS services. Extract pure deterministic functions before the algorithm grows.
 - Public APIs need authorization guards, idempotency keys for retryable mutations, rate limits, and audit/security tests.
-- The integration suite covers the domain loop through services, but HTTP contract tests and browser accessibility/responsive tests are still missing.
+- The integration suite covers concurrency, provenance, and the domain loop; focused HTTP tests cover standardized conflicts and development-route isolation. Browser accessibility/responsive automation is still missing.
 - There is no production observability baseline (structured logs, metrics, traces, error reporting) or CI workflow enforcing all gates.
 - Admin is only a skeleton; content publication currently depends on database seeds.
 
@@ -53,3 +53,12 @@ Add Taste DNA history/explanation, adjustment accept/reject/edit, manual overrid
 Add OpenAPI generation, HTTP/browser/a11y tests, CI gates, structured observability, rate limiting, backup/restore checks, and an environment/deployment runbook.
 
 Do not begin social, pantry, household, or monetization domains before Phases 6–9 establish safe ownership, reliable Cook Mode, user control, and production operations.
+
+## Phase 5.5 hardening completed
+
+- Taste profiles are unique per user and algorithm version, with concurrency-safe creation.
+- Feedback, session completion, and personalized version generation are safe under concurrent retries.
+- Taste signals retain durable CookFeedback provenance; technical exclusions preserve all reason codes without changing learned state.
+- Personalized content hashes represent effective cooking output rather than volatile Taste DNA evidence.
+- Feedback UI learns only dimensions the user explicitly selected, including explicit neutral (`0`).
+- Development-only bootstrap has controller-level production denial in addition to conditional module registration.

@@ -153,17 +153,12 @@ export class PersonalizationService {
     const tasteProfile =
       await this.prisma
         .tasteProfile
-        .findFirst({
+        .findUnique({
           where: {
-            userId,
-
-            algorithmVersion:
-              TASTE_VERSION,
-          },
-
-          orderBy: {
-            computedAt:
-              'desc',
+            userId_algorithmVersion: {
+              userId,
+              algorithmVersion: TASTE_VERSION,
+            },
           },
 
           include: {
@@ -540,18 +535,26 @@ export class PersonalizationService {
     };
 
     const hashInput = {
-      engine:
-        ENGINE_VERSION,
-
-      userId,
-
-      recipeId:
-        recipe.id,
-
-      baseVersionId:
-        base.id,
-
-      snapshot,
+      algorithmVersion: ENGINE_VERSION,
+      servings: snapshot.servings,
+      prepTimeMinutes: snapshot.prepTimeMinutes,
+      cookTimeMinutes: snapshot.cookTimeMinutes,
+      summary: snapshot.summary,
+      ingredients: ingredients.map((ingredient) => ({
+        slug: ingredient.slug,
+        quantity: ingredient.quantity,
+        unit: ingredient.unit,
+        preparation: ingredient.preparation,
+        note: ingredient.note,
+        sortOrder: ingredient.sortOrder,
+      })),
+      steps: snapshot.steps.map((step) => ({
+        stepNo: step.stepNo,
+        instruction: step.instruction,
+        durationSeconds: step.durationSeconds,
+        heatLevel: step.heatLevel,
+        tip: step.tip,
+      })),
     };
 
     const contentHash =
@@ -559,104 +562,55 @@ export class PersonalizationService {
         hashInput,
       );
 
-    const existing =
-      await this.prisma
-        .personalizedRecipeVersion
-        .findFirst({
-          where: {
+    const persisted = await this.prisma.$transaction(async (tx) => {
+      const lockKey = `${userId}:${recipe.id}`;
+
+      await tx.$queryRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtextextended(${lockKey}, 0)
+        ) IS NULL AS locked
+      `;
+
+      const existing = await tx.personalizedRecipeVersion.findUnique({
+        where: {
+          userId_recipeId_contentHash: {
             userId,
-            recipeId:
-              recipe.id,
+            recipeId: recipe.id,
             contentHash,
           },
-        });
-
-    if (existing) {
-      return {
-        data: {
-          id:
-            existing.id,
-
-          versionNo:
-            existing.versionNo,
-
-          algorithmVersion:
-            existing
-              .algorithmVersion,
-
-          createdAt:
-            existing.createdAt,
-
-          reused:
-            true,
-
-          snapshot:
-            existing
-              .snapshotJson,
         },
-      };
-    }
+      });
 
-    const aggregate =
-      await this.prisma
-        .personalizedRecipeVersion
-        .aggregate({
-          where: {
-            userId,
+      if (existing) {
+        return { version: existing, reused: true };
+      }
 
-            recipeId:
-              recipe.id,
-          },
-
-          _max: {
-            versionNo: true,
-          },
-        });
-
-    const nextVersion =
-      Math.max(
+      const aggregate = await tx.personalizedRecipeVersion.aggregate({
+        where: { userId, recipeId: recipe.id },
+        _max: { versionNo: true },
+      });
+      const nextVersion = Math.max(
         base.versionNo + 1,
-
-        (
-          aggregate._max
-            .versionNo ??
-          base.versionNo
-        ) + 1,
+        (aggregate._max.versionNo ?? base.versionNo) + 1,
       );
+      const created = await tx.personalizedRecipeVersion.create({
+        data: {
+          userId,
+          recipeId: recipe.id,
+          baseRecipeVersionId: base.id,
+          tasteProfileId: tasteProfile.id,
+          versionNo: nextVersion,
+          algorithmVersion: ENGINE_VERSION,
+          contentHash,
+          adjustmentJson: adjustments as Prisma.InputJsonValue,
+          snapshotJson: snapshot as Prisma.InputJsonValue,
+        },
+      });
 
-    const created =
-      await this.prisma
-        .personalizedRecipeVersion
-        .create({
-          data: {
-            userId,
+      return { version: created, reused: false };
+    });
 
-            recipeId:
-              recipe.id,
-
-            baseRecipeVersionId:
-              base.id,
-
-            tasteProfileId:
-              tasteProfile.id,
-
-            versionNo:
-              nextVersion,
-
-            algorithmVersion:
-              ENGINE_VERSION,
-
-            contentHash,
-
-            adjustmentJson:
-              adjustments as
-                Prisma.InputJsonValue,
-
-            snapshotJson:
-              snapshot as
-                Prisma.InputJsonValue,
-          },
-        });
+    const created = persisted.version;
 
     return {
       data: {
@@ -674,7 +628,7 @@ export class PersonalizationService {
           created.createdAt,
 
         reused:
-          false,
+          persisted.reused,
 
         snapshot:
           created.snapshotJson,

@@ -55,3 +55,38 @@ export type CookSessionResponse = {
   events:
     CookSessionEventResponse[];
 };
+
+export type TasteFeedbackInput = {
+  overallScore?: number;
+
+  dimensions: Partial<
+    Record<
+      | 'saltiness'
+      | 'sweetness'
+      | 'sourness'
+      | 'spiciness'
+      | 'umami'
+      | 'fat_richness'
+      | 'bitterness'
+      | 'softness'
+      | 'dryness_sauce'
+      | 'garlic_onion'
+      | 'herbal_aroma',
+      number
+    >
+  >;
+
+  technicalFlags?: string[];
+  privateNote?: string;
+};
+
+export type TasteDimensionResponse = {
+  key: string;
+  scopeType: string;
+  scopeId: string;
+  score: number;
+  confidence: number;
+  effectiveWeight: number;
+  sampleCount: number;
+  manualOverride: number | null;
+};

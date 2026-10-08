@@ -8,7 +8,8 @@
     "typecheck": "echo prisma-schema",
     "build": "echo prisma-schema",
     "lint": "echo prisma-schema",
-    "test": "echo prisma-schema",
+    "test": "node prisma/seed-data/run-validation.mjs",
+    "db:seed:validate": "node prisma/seed-data/run-validation.mjs",
     "db:seed": "pnpm run db:seed:base && pnpm run db:seed:personalization",
     "db:seed:base": "node prisma/seed.mjs",
     "db:seed:personalization": "node prisma/seed-personalization.mjs"

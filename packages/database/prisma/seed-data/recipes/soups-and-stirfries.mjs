@@ -1,0 +1,80 @@
+/** @type {import('../types.d.ts').AlphaRecipe[]} */
+export const soupAndStirFryRecipes = [
+  {
+    slug: 'rau-muong-xao-toi', title: 'Rau muống xào tỏi', version: 1, servings: 3,
+    prepTimeMinutes: 12, cookTimeMinutes: 6,
+    summary: 'Rau muống xanh giòn, thơm tỏi và được nêm nhẹ để dùng cùng cơm.',
+    ingredients: [
+      { slug: 'rau-muong', name: 'Rau muống', category: 'vegetable', quantity: 500, unit: 'g', preparation: 'nhặt, rửa sạch và để ráo', note: null, scalingMode: 'LINEAR', scalingExponent: 1, roundingIncrement: 25 },
+      { slug: 'toi', name: 'Tỏi', category: 'aromatic', quantity: 5, unit: 'tép', preparation: 'đập dập', note: null, scalingMode: 'CONSERVATIVE', scalingExponent: 0.8, roundingIncrement: 1, adjustments: [{ dimensionKey: 'garlic_onion', sensitivity: 0.4, minFactor: 0.7, maxFactor: 1.35 }] },
+      { slug: 'nuoc-mam', name: 'Nước mắm', category: 'seasoning', quantity: 8, unit: 'ml', preparation: null, note: null, scalingMode: 'CONSERVATIVE', scalingExponent: 0.75, roundingIncrement: 1, adjustments: [{ dimensionKey: 'saltiness', sensitivity: 0.25, minFactor: 0.75, maxFactor: 1.2 }] },
+      { slug: 'dau-an', name: 'Dầu ăn', category: 'fat', quantity: 18, unit: 'ml', preparation: null, note: null, scalingMode: 'CONSERVATIVE', scalingExponent: 0.7, roundingIncrement: 2 },
+    ],
+    steps: [
+      { stepNo: 1, instruction: 'Pha nước mắm với một ít nước; để rau thật ráo.', durationSeconds: 60, heatLevel: null, tip: null },
+      { stepNo: 2, instruction: 'Làm chảo thật nóng, cho dầu và tỏi vào đảo nhanh đến khi thơm.', durationSeconds: 30, heatLevel: 'lớn', tip: 'Không để tỏi cháy nâu.' },
+      { stepNo: 3, instruction: 'Cho rau vào, đảo liên tục để rau chín đều.', durationSeconds: 120, heatLevel: 'lớn', tip: null },
+      { stepNo: 4, instruction: 'Rưới gia vị, đảo đến khi rau vừa chín và còn xanh rồi tắt bếp.', durationSeconds: 60, heatLevel: 'lớn', tip: 'Không xào quá lâu để rau không mềm nhũn.' },
+    ],
+  },
+  {
+    slug: 'canh-cai-thit-bam', title: 'Canh cải thịt băm', version: 1, servings: 4,
+    prepTimeMinutes: 12, cookTimeMinutes: 15,
+    summary: 'Canh rau cải thanh nhẹ với thịt băm chín kỹ, phù hợp bữa cơm hằng ngày.',
+    ingredients: [
+      { slug: 'rau-cai-xanh', name: 'Rau cải xanh', category: 'vegetable', quantity: 350, unit: 'g', preparation: 'rửa sạch, cắt khúc', note: null, scalingMode: 'LINEAR', scalingExponent: 1, roundingIncrement: 25 },
+      { slug: 'thit-heo-bam', name: 'Thịt heo băm', category: 'protein', quantity: 180, unit: 'g', preparation: null, note: null, scalingMode: 'LINEAR', scalingExponent: 1, roundingIncrement: 10 },
+      { slug: 'nuoc', name: 'Nước', category: 'liquid', quantity: 1000, unit: 'ml', preparation: null, note: null, scalingMode: 'LINEAR', scalingExponent: 1, roundingIncrement: 50 },
+      { slug: 'hanh-kho', name: 'Hành tím', category: 'aromatic', quantity: 2, unit: 'củ', preparation: 'băm nhỏ', note: null, scalingMode: 'CONSERVATIVE', scalingExponent: 0.8, roundingIncrement: 0.5 },
+      { slug: 'nuoc-mam', name: 'Nước mắm', category: 'seasoning', quantity: 15, unit: 'ml', preparation: null, note: null, scalingMode: 'CONSERVATIVE', scalingExponent: 0.75, roundingIncrement: 1, adjustments: [{ dimensionKey: 'saltiness', sensitivity: 0.3, minFactor: 0.75, maxFactor: 1.2 }] },
+      { slug: 'dau-an', name: 'Dầu ăn', category: 'fat', quantity: 5, unit: 'ml', preparation: null, note: null, scalingMode: 'FIXED', scalingExponent: 1, roundingIncrement: 1 },
+    ],
+    steps: [
+      { stepNo: 1, instruction: 'Làm nóng dầu, phi hành tím thơm rồi cho thịt băm vào đảo tơi.', durationSeconds: 180, heatLevel: 'vừa', tip: null },
+      { stepNo: 2, instruction: 'Đảo đến khi thịt đổi màu hoàn toàn và không còn phần hồng.', durationSeconds: 120, heatLevel: 'vừa', tip: null },
+      { stepNo: 3, instruction: 'Thêm nước, đun sôi và hớt bọt nếu có.', durationSeconds: 300, heatLevel: 'lớn', tip: null },
+      { stepNo: 4, instruction: 'Cho rau cải vào, nấu đến khi rau mềm vừa và thịt chín kỹ.', durationSeconds: 180, heatLevel: 'vừa', tip: 'Không nấu quá lâu để rau giữ màu.' },
+      { stepNo: 5, instruction: 'Nêm nước mắm, nếm lại rồi tắt bếp.', durationSeconds: 60, heatLevel: 'nhỏ', tip: null },
+    ],
+  },
+  {
+    slug: 'tom-rang-thit', title: 'Tôm rang thịt', version: 1, servings: 4,
+    prepTimeMinutes: 15, cookTimeMinutes: 22,
+    summary: 'Tôm và thịt rang chín kỹ, áo lớp sốt mặn ngọt bóng nhẹ.',
+    ingredients: [
+      { slug: 'tom', name: 'Tôm', category: 'protein', quantity: 300, unit: 'g', preparation: 'rửa sạch, cắt râu', note: null, scalingMode: 'LINEAR', scalingExponent: 1, roundingIncrement: 25 },
+      { slug: 'thit-ba-chi', name: 'Thịt ba chỉ', category: 'protein', quantity: 250, unit: 'g', preparation: 'thái miếng mỏng', note: null, scalingMode: 'LINEAR', scalingExponent: 1, roundingIncrement: 25 },
+      { slug: 'hanh-kho', name: 'Hành tím', category: 'aromatic', quantity: 2, unit: 'củ', preparation: 'băm nhỏ', note: null, scalingMode: 'CONSERVATIVE', scalingExponent: 0.8, roundingIncrement: 0.5 },
+      { slug: 'nuoc-mam', name: 'Nước mắm', category: 'seasoning', quantity: 20, unit: 'ml', preparation: null, note: null, scalingMode: 'CONSERVATIVE', scalingExponent: 0.75, roundingIncrement: 1, adjustments: [{ dimensionKey: 'saltiness', sensitivity: 0.35, minFactor: 0.7, maxFactor: 1.2 }] },
+      { slug: 'duong', name: 'Đường', category: 'seasoning', quantity: 1, unit: 'muỗng canh', preparation: null, note: null, scalingMode: 'CONSERVATIVE', scalingExponent: 0.75, roundingIncrement: 0.25, adjustments: [{ dimensionKey: 'sweetness', sensitivity: 0.3, minFactor: 0.75, maxFactor: 1.25 }] },
+      { slug: 'dau-an', name: 'Dầu ăn', category: 'fat', quantity: 8, unit: 'ml', preparation: null, note: null, scalingMode: 'CONSERVATIVE', scalingExponent: 0.7, roundingIncrement: 1 },
+      { slug: 'tieu-den', name: 'Tiêu đen', category: 'seasoning', quantity: 1, unit: 'g', preparation: 'xay', note: null, scalingMode: 'FIXED', scalingExponent: 1, roundingIncrement: 0.1 },
+    ],
+    steps: [
+      { stepNo: 1, instruction: 'Làm nóng dầu, cho thịt vào đảo đến khi ra mỡ và các cạnh săn lại.', durationSeconds: 360, heatLevel: 'vừa', tip: null },
+      { stepNo: 2, instruction: 'Cho hành tím và tôm vào, đảo đến khi tôm chuyển màu đều.', durationSeconds: 240, heatLevel: 'vừa-lớn', tip: null },
+      { stepNo: 3, instruction: 'Thêm nước mắm, đường và một ít nước, đảo đều.', durationSeconds: 120, heatLevel: 'vừa', tip: null },
+      { stepNo: 4, instruction: 'Rang đến khi tôm và thịt chín kỹ, sốt sánh bám quanh nguyên liệu.', durationSeconds: 360, heatLevel: 'nhỏ', tip: 'Tôm phải đục đều; thịt không còn phần hồng.' },
+      { stepNo: 5, instruction: 'Rắc tiêu, đảo lần cuối rồi tắt bếp.', durationSeconds: 30, heatLevel: 'nhỏ', tip: null },
+    ],
+  },
+  {
+    slug: 'bo-xao-hanh-tay', title: 'Bò xào hành tây', version: 1, servings: 3,
+    prepTimeMinutes: 15, cookTimeMinutes: 9,
+    summary: 'Thịt bò xào nhanh với hành tây ngọt nhẹ và sốt mỏng thơm tỏi.',
+    ingredients: [
+      { slug: 'thit-bo', name: 'Thịt bò', category: 'protein', quantity: 350, unit: 'g', preparation: 'thái mỏng ngang thớ', note: null, scalingMode: 'LINEAR', scalingExponent: 1, roundingIncrement: 25 },
+      { slug: 'hanh-tay', name: 'Hành tây', category: 'vegetable', quantity: 1, unit: 'củ', preparation: 'bổ múi', note: null, scalingMode: 'LINEAR', scalingExponent: 1, roundingIncrement: 0.5, adjustments: [{ dimensionKey: 'garlic_onion', sensitivity: 0.25, minFactor: 0.8, maxFactor: 1.25 }] },
+      { slug: 'toi', name: 'Tỏi', category: 'aromatic', quantity: 3, unit: 'tép', preparation: 'băm nhỏ', note: null, scalingMode: 'CONSERVATIVE', scalingExponent: 0.8, roundingIncrement: 1, adjustments: [{ dimensionKey: 'garlic_onion', sensitivity: 0.3, minFactor: 0.75, maxFactor: 1.3 }] },
+      { slug: 'nuoc-mam', name: 'Nước mắm', category: 'seasoning', quantity: 10, unit: 'ml', preparation: null, note: null, scalingMode: 'CONSERVATIVE', scalingExponent: 0.75, roundingIncrement: 1, adjustments: [{ dimensionKey: 'saltiness', sensitivity: 0.25, minFactor: 0.75, maxFactor: 1.2 }] },
+      { slug: 'dau-an', name: 'Dầu ăn', category: 'fat', quantity: 15, unit: 'ml', preparation: null, note: null, scalingMode: 'CONSERVATIVE', scalingExponent: 0.7, roundingIncrement: 1 },
+      { slug: 'tieu-den', name: 'Tiêu đen', category: 'seasoning', quantity: 1, unit: 'g', preparation: 'xay', note: null, scalingMode: 'FIXED', scalingExponent: 1, roundingIncrement: 0.1 },
+    ],
+    steps: [
+      { stepNo: 1, instruction: 'Trộn thịt bò với một nửa tỏi, nước mắm và một nửa dầu.', durationSeconds: 300, heatLevel: null, tip: 'Không để thịt ngoài nhiệt độ phòng lâu.' },
+      { stepNo: 2, instruction: 'Làm chảo nóng, cho thịt bò vào xào nhanh đến mức chín mong muốn rồi trút ra.', durationSeconds: 150, heatLevel: 'lớn', tip: 'Chia mẻ nếu chảo nhỏ để thịt không bị ra nhiều nước.' },
+      { stepNo: 3, instruction: 'Thêm dầu và tỏi còn lại, cho hành tây vào đảo đến khi trong nhẹ.', durationSeconds: 150, heatLevel: 'vừa-lớn', tip: null },
+      { stepNo: 4, instruction: 'Cho thịt bò trở lại, đảo đều đến khi nóng và chín an toàn rồi rắc tiêu.', durationSeconds: 90, heatLevel: 'lớn', tip: 'Nếu phục vụ người cần thận trọng, nấu thịt chín kỹ.' },
+    ],
+  },
+];

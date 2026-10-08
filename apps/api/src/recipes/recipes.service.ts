@@ -226,6 +226,17 @@ export class RecipesService {
 
                 sortOrder:
                   row.sortOrder,
+
+                scalingMode:
+                  row.scalingMode,
+
+                scalingExponent:
+                  Number(row.scalingExponent),
+
+                roundingIncrement:
+                  row.roundingIncrement === null
+                    ? null
+                    : Number(row.roundingIncrement),
               }),
             ),
 

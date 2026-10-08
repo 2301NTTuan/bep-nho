@@ -17,19 +17,19 @@ The web experience now presents this loop coherently on desktop and mobile. It i
 
 ## Remaining product gaps
 
-- Real sign-in, session management, ownership checks, and account lifecycle are absent. Current user IDs in mutation URLs/bodies are not a production authorization model.
+- First-party email/password sign-in, revocable cookie sessions, `/v1/me`, and object-level ownership checks are now implemented. Account lifecycle remains incomplete: email verification, password reset, MFA, device/session management, and account deletion are not yet available.
 - Content depth is insufficient: there is one development recipe explicitly awaiting culinary review, with no production media or editorial workflow.
 - Arbitrary serving overrides are intentionally disabled until ingredient-aware culinary scaling is implemented in Phase 7; every session now uses the servings from the exact canonical/personalized snapshot cooked.
 - Cook Mode is online-only; timers are informational and session resume/offline event queueing are not implemented.
 - Users see generated adjustments but cannot explicitly accept, reject, edit, or pin “My Best Version” before future use.
 - Taste DNA has no dedicated history/control screen for explanations, overrides, or reset.
-- Production web authentication currently fails closed with a configuration message, as intended, but needs a real provider before deployment.
+- The web now has real login/register/logout flows and keeps public recipe browsing available while signed out. Deployment still needs verified same-site cookie/origin configuration and abuse controls.
 
 ## Architectural debt and operational gaps
 
 - API contracts are shared TypeScript definitions, not generated from an OpenAPI source of truth.
 - Domain rules still live mainly in NestJS services. Extract pure deterministic functions before the algorithm grows.
-- Public APIs need authorization guards, idempotency keys for retryable mutations, rate limits, and audit/security tests.
+- User-owned APIs now have session guards, 404 ownership semantics, Origin checks, and focused security tests. Retry idempotency beyond the hardened cooking paths, login throttling/rate limits, and broader audit controls remain open.
 - The integration suite covers concurrency, provenance, and the domain loop; focused HTTP tests cover standardized conflicts and development-route isolation. Browser accessibility/responsive automation is still missing.
 - There is no production observability baseline (structured logs, metrics, traces, error reporting) or CI workflow enforcing all gates.
 - Admin is only a skeleton; content publication currently depends on database seeds.
@@ -38,7 +38,7 @@ The web experience now presents this loop coherently on desktop and mobile. It i
 
 ### Phase 6 — Auth and ownership boundary
 
-Implement a small first-party session boundary (or a narrowly selected identity provider), `/v1/me`, secure httpOnly web sessions, object-level ownership guards, and authorization tests. Remove all client-supplied ownership decisions from mutations.
+Completed 2026-10-08: first-party scrypt credentials, hashed opaque sessions, `/v1/me`, secure httpOnly cookies, exact-Origin CSRF protection, object ownership guards, removal of caller-selected user IDs, web auth UI, and two-user authorization tests.
 
 ### Phase 7 — Alpha content and cooking reliability
 
@@ -62,3 +62,11 @@ Do not begin social, pantry, household, or monetization domains before Phases 6�
 - Personalized content hashes represent effective cooking output rather than volatile Taste DNA evidence.
 - Feedback UI learns only dimensions the user explicitly selected, including explicit neutral (`0`).
 - Development-only bootstrap has controller-level production denial in addition to conditional module registration.
+
+## Phase 6 authentication completed
+
+- Authentication uses normalized email plus versioned scrypt hashes; raw passwords and raw session tokens are not persisted.
+- Opaque cookie sessions enforce expiry, revocation, and active-user status; production cookies are HttpOnly, SameSite=Lax, Path=/, and Secure.
+- All cook, feedback, Taste DNA, and personalization ownership is derived from the authenticated session. Foreign resources return 404, and legacy user-ID routes are gone.
+- Stateful browser requests enforce configured origins, while credentialed CORS never emits a wildcard origin.
+- Remaining production blockers are account recovery/verification, abuse protection, deployment/operations hardening, content depth, cooking reliability, and browser accessibility coverage.

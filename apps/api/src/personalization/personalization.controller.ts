@@ -2,17 +2,21 @@ import {
   Controller,
   Get,
   Param,
-  ParseUUIDPipe,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 
+import { CurrentUser } from '../auth/current-user.decorator';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
+import type { AuthenticatedIdentity } from '../auth/auth.types';
 import {
   PersonalizationService,
 } from './personalization.service';
 
 @Controller(
-  'users/:userId/recipes/:slug/personalized-versions',
+  'me/recipes/:slug/personalized-versions',
 )
+@UseGuards(SessionAuthGuard)
 export class PersonalizationController {
   constructor(
     private readonly service:
@@ -21,35 +25,29 @@ export class PersonalizationController {
 
   @Post()
   create(
-    @Param(
-      'userId',
-      new ParseUUIDPipe(),
-    )
-    userId: string,
+    @CurrentUser()
+    identity: AuthenticatedIdentity,
 
     @Param('slug')
     slug: string,
   ) {
     return this.service
       .createVersion(
-        userId,
+        identity.userId,
         slug,
       );
   }
 
   @Get('latest')
   latest(
-    @Param(
-      'userId',
-      new ParseUUIDPipe(),
-    )
-    userId: string,
+    @CurrentUser()
+    identity: AuthenticatedIdentity,
 
     @Param('slug')
     slug: string,
   ) {
     return this.service.latest(
-      userId,
+      identity.userId,
       slug,
     );
   }

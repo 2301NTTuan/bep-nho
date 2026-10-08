@@ -4,12 +4,17 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 
+import { CurrentUser } from '../auth/current-user.decorator';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
+import type { AuthenticatedIdentity } from '../auth/auth.types';
 import { SubmitFeedbackDto } from './dto/submit-feedback.dto';
 import { FeedbackService } from './feedback.service';
 
 @Controller('cook-sessions')
+@UseGuards(SessionAuthGuard)
 export class FeedbackController {
   constructor(
     private readonly service:
@@ -18,6 +23,9 @@ export class FeedbackController {
 
   @Post(':id/feedback')
   submit(
+    @CurrentUser()
+    identity: AuthenticatedIdentity,
+
     @Param(
       'id',
       new ParseUUIDPipe(),
@@ -28,6 +36,7 @@ export class FeedbackController {
     dto: SubmitFeedbackDto,
   ) {
     return this.service.submit(
+      identity.userId,
       id,
       dto,
     );

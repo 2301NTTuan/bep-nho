@@ -1,15 +1,16 @@
 import {
   Controller,
   Get,
-  Param,
-  ParseUUIDPipe,
+  UseGuards,
 } from '@nestjs/common';
 
+import { CurrentUser } from '../auth/current-user.decorator';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
+import type { AuthenticatedIdentity } from '../auth/auth.types';
 import { FeedbackService } from './feedback.service';
 
-@Controller(
-  'users/:userId/taste-profile',
-)
+@Controller('me/taste-profile')
+@UseGuards(SessionAuthGuard)
 export class TasteProfileController {
   constructor(
     private readonly service:
@@ -18,15 +19,12 @@ export class TasteProfileController {
 
   @Get()
   get(
-    @Param(
-      'userId',
-      new ParseUUIDPipe(),
-    )
-    userId: string,
+    @CurrentUser()
+    identity: AuthenticatedIdentity,
   ) {
     return this.service
       .getTasteProfile(
-        userId,
+        identity.userId,
       );
   }
 }

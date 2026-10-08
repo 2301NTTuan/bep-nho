@@ -52,6 +52,7 @@ export class FeedbackService {
   ) {}
 
   async submit(
+    userId: string,
     cookSessionId: string,
     dto: SubmitFeedbackDto,
   ) {
@@ -80,9 +81,10 @@ export class FeedbackService {
     const session =
       await this.prisma
         .cookSession
-        .findUnique({
+        .findFirst({
           where: {
             id: cookSessionId,
+            userId,
           },
 
           include: {

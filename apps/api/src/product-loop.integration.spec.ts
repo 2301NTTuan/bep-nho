@@ -41,12 +41,11 @@ describe('core hardening invariants (database integration)', () => {
   }
 
   async function completedSession(userId: string, personalizedRecipeVersionId?: string) {
-    const session = await cooking.start({
-      userId,
+    const session = await cooking.start(userId, {
       recipeSlug: slug,
       personalizedRecipeVersionId,
     });
-    await cooking.complete(session.data.id);
+    await cooking.complete(userId, session.data.id);
     return session;
   }
 
@@ -136,10 +135,10 @@ describe('core hardening invariants (database integration)', () => {
     expect(list.data.some((item) => item.slug === slug)).toBe(true);
     expect((await recipes.detail(slug)).data.version.ingredients).toHaveLength(1);
 
-    const session = await cooking.start({ userId: user.id, recipeSlug: slug });
+    const session = await cooking.start(user.id, { recipeSlug: slug });
     const completed = await Promise.all([
-      cooking.complete(session.data.id),
-      cooking.complete(session.data.id),
+      cooking.complete(user.id, session.data.id),
+      cooking.complete(user.id, session.data.id),
     ]);
     expect(completed.every((result) => result.data.status === 'completed')).toBe(true);
     expect(completed.every((result) => result.data.syncVersion === 2)).toBe(true);
@@ -156,11 +155,11 @@ describe('core hardening invariants (database integration)', () => {
     ]);
 
     await Promise.all([
-      feedback.submit(first.data.id, {
+      feedback.submit(user.id, first.data.id, {
         dimensions: { saltiness: 0.5 },
         technicalFlags: ['burnt'],
       }),
-      feedback.submit(second.data.id, {
+      feedback.submit(user.id, second.data.id, {
         dimensions: { saltiness: -0.5 },
         technicalFlags: ['undercooked'],
       }),
@@ -178,8 +177,8 @@ describe('core hardening invariants (database integration)', () => {
     const session = await completedSession(user.id);
     const input = { dimensions: { saltiness: -0.5 }, overallScore: 4.5 };
     const outcomes = await Promise.allSettled([
-      feedback.submit(session.data.id, input),
-      feedback.submit(session.data.id, input),
+      feedback.submit(user.id, session.data.id, input),
+      feedback.submit(user.id, session.data.id, input),
     ]);
 
     expect(outcomes.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
@@ -200,7 +199,7 @@ describe('core hardening invariants (database integration)', () => {
   it('learns explicit zero without manufacturing omitted dimensions', async () => {
     const user = await createUser();
     const session = await completedSession(user.id);
-    const result = await feedback.submit(session.data.id, {
+    const result = await feedback.submit(user.id, session.data.id, {
       dimensions: { saltiness: 0 },
     });
     const storedFeedback = await prisma.cookFeedback.findUniqueOrThrow({
@@ -240,7 +239,7 @@ describe('core hardening invariants (database integration)', () => {
     });
 
     const session = await completedSession(user.id);
-    const result = await feedback.submit(session.data.id, {
+    const result = await feedback.submit(user.id, session.data.id, {
       dimensions: { saltiness: 1 },
       technicalFlags: ['undercooked', 'burnt'],
     });
@@ -330,15 +329,14 @@ describe('core hardening invariants (database integration)', () => {
       where: { id: personalV2.id },
       data: { snapshotJson: { ...v2Snapshot, servings: 3 } as Prisma.InputJsonValue },
     });
-    const historicalSession = await cooking.start({
-      userId: user.id,
+    const historicalSession = await cooking.start(user.id, {
       recipeSlug: slug,
       personalizedRecipeVersionId: personalV2.id,
     });
     expect(historicalSession.data.servings).toBe(3);
     expect(historicalSession.data.recipe.personalizedVersionId).toBe(personalV2.id);
-    await cooking.complete(historicalSession.data.id);
-    const learned = await feedback.submit(historicalSession.data.id, {
+    await cooking.complete(user.id, historicalSession.data.id);
+    const learned = await feedback.submit(user.id, historicalSession.data.id, {
       dimensions: { saltiness: 0 },
     });
 
@@ -352,7 +350,7 @@ describe('core hardening invariants (database integration)', () => {
     });
     expect(provenance.cookFeedback?.cookSession.id).toBe(historicalSession.data.id);
     expect(provenance.cookFeedback?.cookSession.personalizedRecipeVersionId).toBe(personalV2.id);
-    const historical = await cooking.get(historicalSession.data.id);
+    const historical = await cooking.get(user.id, historicalSession.data.id);
     expect(historical.data.recipe.personalizedVersionId).toBe(personalV2.id);
     expect(historical.data.recipe.personalizedVersionNo).toBe(2);
   });

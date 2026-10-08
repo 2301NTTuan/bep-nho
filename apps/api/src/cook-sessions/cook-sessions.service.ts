@@ -165,13 +165,15 @@ export class CookSessionsService {
 
   private async findSession(
     id: string,
+    userId: string,
   ) {
     const session =
       await this.prisma
         .cookSession
-        .findUnique({
+        .findFirst({
           where: {
             id,
+            userId,
           },
 
           include: {
@@ -203,19 +205,20 @@ export class CookSessionsService {
   }
 
   async start(
+    userId: string,
     dto: StartCookSessionDto,
   ) {
     const user =
       await this.prisma.user
         .findUnique({
           where: {
-            id: dto.userId,
+            id: userId,
           },
         });
 
     if (!user) {
       throw new NotFoundException(
-        `User '${dto.userId}' was not found`,
+        'Current user was not found',
       );
     }
 
@@ -267,7 +270,7 @@ export class CookSessionsService {
       if (
         !personalized ||
         personalized.userId !==
-          dto.userId
+          userId
       ) {
         throw new NotFoundException(
           'Personalized recipe version was not found',
@@ -481,16 +484,19 @@ export class CookSessionsService {
         );
 
     return this.get(
+      userId,
       session.id,
     );
   }
 
   async get(
+    userId: string,
     id: string,
   ) {
     const session =
       await this.findSession(
         id,
+        userId,
       );
 
     return this.serializeSession(
@@ -499,9 +505,35 @@ export class CookSessionsService {
   }
 
   async addEvent(
+    userId: string,
     id: string,
     dto: AddCookEventDto,
   ) {
+    const session =
+      await this.prisma
+        .cookSession
+        .findFirst({
+          where: {
+            id,
+            userId,
+          },
+        });
+
+    if (!session) {
+      throw new NotFoundException(
+        `Cook session '${id}' was not found`,
+      );
+    }
+
+    if (
+      session.status !==
+      'started'
+    ) {
+      throw new ConflictException(
+        `Cook session '${id}' is not active`,
+      );
+    }
+
     const existing =
       await this.prisma
         .cookEvent
@@ -547,30 +579,6 @@ export class CookSessionsService {
             true,
         },
       };
-    }
-
-    const session =
-      await this.prisma
-        .cookSession
-        .findUnique({
-          where: {
-            id,
-          },
-        });
-
-    if (!session) {
-      throw new NotFoundException(
-        `Cook session '${id}' was not found`,
-      );
-    }
-
-    if (
-      session.status !==
-      'started'
-    ) {
-      throw new ConflictException(
-        `Cook session '${id}' is not active`,
-      );
     }
 
     try {
@@ -721,6 +729,7 @@ export class CookSessionsService {
   }
 
   async complete(
+    userId: string,
     id: string,
   ) {
     const transition = await this.prisma
@@ -728,6 +737,7 @@ export class CookSessionsService {
       .updateMany({
         where: {
           id,
+          userId,
           status: 'started',
         },
         data: {
@@ -738,8 +748,8 @@ export class CookSessionsService {
       });
 
     if (transition.count === 0) {
-      const current = await this.prisma.cookSession.findUnique({
-        where: { id },
+      const current = await this.prisma.cookSession.findFirst({
+        where: { id, userId },
         select: { status: true },
       });
 
@@ -756,6 +766,6 @@ export class CookSessionsService {
       }
     }
 
-    return this.get(id);
+    return this.get(userId, id);
   }
 }

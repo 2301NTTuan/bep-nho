@@ -1,6 +1,7 @@
 import {
   Module,
 } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
 
 import {
   PersonalizationController,
@@ -11,6 +12,7 @@ import {
 } from './personalization.service';
 
 @Module({
+  imports: [AuthModule],
   controllers: [
     PersonalizationController,
   ],

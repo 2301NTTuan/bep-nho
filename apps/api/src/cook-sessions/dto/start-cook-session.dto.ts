@@ -7,9 +7,6 @@ import {
 } from 'class-validator';
 
 export class StartCookSessionDto {
-  @IsUUID()
-  userId!: string;
-
   @IsString()
   @Length(1, 180)
   @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)

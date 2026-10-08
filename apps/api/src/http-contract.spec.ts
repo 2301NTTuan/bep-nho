@@ -4,6 +4,9 @@ import { NestFactory } from '@nestjs/core';
 import { FeedbackController } from './feedback/feedback.controller';
 import { FeedbackService } from './feedback/feedback.service';
 import { DevController } from './dev/dev.controller';
+import { AuthService } from './auth/auth.service';
+import { SessionAuthGuard } from './auth/session-auth.guard';
+import { SessionCookieService } from './auth/cookies';
 import { CurrentUserService } from './identity/current-user.service';
 import { ApiExceptionFilter } from './http/api-exception.filter';
 
@@ -14,6 +17,18 @@ const currentUser = {
   }),
 };
 
+const auth = {
+  establishSession: jest.fn().mockResolvedValue({
+    token: 'test-session-token',
+    expiresAt: new Date('2030-01-01T00:00:00.000Z'),
+    context: currentUser.resolveByAuthSubject(),
+  }),
+};
+
+const cookies = {
+  set: jest.fn(),
+};
+
 function randomUuid() {
   return '00000000-0000-4000-8000-000000000001';
 }
@@ -22,6 +37,8 @@ function randomUuid() {
   controllers: [DevController],
   providers: [
     { provide: CurrentUserService, useValue: currentUser },
+    { provide: AuthService, useValue: auth },
+    { provide: SessionCookieService, useValue: cookies },
     { provide: ConfigService, useValue: { get: () => 'development' } },
   ],
 })
@@ -31,6 +48,8 @@ class DevelopmentDevModule {}
   controllers: [DevController],
   providers: [
     { provide: CurrentUserService, useValue: currentUser },
+    { provide: AuthService, useValue: auth },
+    { provide: SessionCookieService, useValue: cookies },
     { provide: ConfigService, useValue: { get: () => 'production' } },
   ],
 })
@@ -47,12 +66,20 @@ class ProductionDevModule {}
         );
       },
     },
+  }, {
+    provide: SessionAuthGuard,
+    useValue: { canActivate: () => true },
+  }, {
+    provide: AuthService,
+    useValue: {
+      authenticate: () => ({ userId: randomUuid(), sessionId: randomUuid() }),
+    },
   }],
 })
 class ConflictModule {}
 
 async function start(module: Type<unknown>) {
-  const app = await NestFactory.create(module, { logger: false });
+  const app = await NestFactory.create(module, { logger: false, abortOnError: false });
   app.setGlobalPrefix('v1');
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
   app.useGlobalFilters(new ApiExceptionFilter());
@@ -87,12 +114,25 @@ describe('HTTP hardening behavior', () => {
     });
   });
 
+  it('returns standardized 404 for development sessions in production', async () => {
+    const server = await start(ProductionDevModule);
+    apps.push(server.app);
+    const response = await fetch(`${server.base}/dev/session`, { method: 'POST' });
+    expect(response.status).toBe(404);
+    expect((await response.json()) as object).toMatchObject({
+      error: { code: 'NOT_FOUND' },
+    });
+  });
+
   it('returns standardized conflict instead of leaking an internal error', async () => {
     const server = await start(ConflictModule);
     apps.push(server.app);
     const response = await fetch(`${server.base}/cook-sessions/${randomUuid()}/feedback`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        cookie: 'bep_nho_session=test-session-token',
+      },
       body: JSON.stringify({ dimensions: { saltiness: 0 } }),
     });
     expect(response.status).toBe(409);

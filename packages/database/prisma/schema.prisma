@@ -20,7 +20,9 @@ model User {
   credential    UserCredential?
   authSessions  AuthSession[]
 
-  personalizedRecipeVersions PersonalizedRecipeVersion[]
+  personalizedRecipeVersions      PersonalizedRecipeVersion[]
+  personalizedAdjustmentDecisions PersonalizedAdjustmentDecision[]
+  recipePreferences               UserRecipePreference[]
 
   @@map("users")
 }
@@ -53,15 +55,17 @@ model AuthSession {
 }
 
 model Recipe {
-  id                         String                      @id @default(uuid()) @db.Uuid
-  slug                       String                      @unique @db.VarChar(180)
-  canonicalTitle             String                      @map("canonical_title") @db.VarChar(180)
-  status                     String                      @default("draft") @db.VarChar(24)
-  cuisine                    String                      @default("vietnamese") @db.VarChar(64)
-  createdAt                  DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                  DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
-  versions                   RecipeVersion[]
-  personalizedRecipeVersions PersonalizedRecipeVersion[]
+  id                              String                           @id @default(uuid()) @db.Uuid
+  slug                            String                           @unique @db.VarChar(180)
+  canonicalTitle                  String                           @map("canonical_title") @db.VarChar(180)
+  status                          String                           @default("draft") @db.VarChar(24)
+  cuisine                         String                           @default("vietnamese") @db.VarChar(64)
+  createdAt                       DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                       DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  versions                        RecipeVersion[]
+  personalizedRecipeVersions      PersonalizedRecipeVersion[]
+  personalizedAdjustmentDecisions PersonalizedAdjustmentDecision[]
+  userPreferences                 UserRecipePreference[]
 
   @@index([status, canonicalTitle])
   @@map("recipes")
@@ -155,6 +159,7 @@ model TasteProfile {
   dimensions                 TasteDimension[]
   signals                    TasteSignal[]
   personalizedRecipeVersions PersonalizedRecipeVersion[]
+  controlEvents              TasteControlEvent[]
 
   @@unique([userId, algorithmVersion])
   @@index([userId])
@@ -196,6 +201,19 @@ model TasteSignal {
   @@map("taste_signals")
 }
 
+model TasteControlEvent {
+  id             String       @id @default(uuid()) @db.Uuid
+  tasteProfileId String       @map("taste_profile_id") @db.Uuid
+  dimensionKey   String       @map("dimension_key") @db.VarChar(64)
+  action         String       @db.VarChar(32)
+  value          Decimal?     @db.Decimal(6, 5)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  tasteProfile   TasteProfile @relation(fields: [tasteProfileId], references: [id], onDelete: Restrict)
+
+  @@index([tasteProfileId, dimensionKey, createdAt])
+  @@map("taste_control_events")
+}
+
 model Ingredient {
   id            String   @id @default(uuid()) @db.Uuid
   slug          String   @unique @db.VarChar(180)
@@ -203,8 +221,9 @@ model Ingredient {
   category      String?  @db.VarChar(64)
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  recipeIngredients     RecipeIngredient[]
-  recipeAdjustmentRules RecipeAdjustmentRule[]
+  recipeIngredients               RecipeIngredient[]
+  recipeAdjustmentRules           RecipeAdjustmentRule[]
+  personalizedAdjustmentDecisions PersonalizedAdjustmentDecision[]
 
   @@index([canonicalName])
   @@map("ingredients")
@@ -271,23 +290,70 @@ model PersonalizedRecipeVersion {
   baseRecipeVersionId String @map("base_recipe_version_id") @db.Uuid
   tasteProfileId      String @map("taste_profile_id") @db.Uuid
 
-  versionNo        Int    @map("version_no")
-  algorithmVersion String @map("algorithm_version") @db.VarChar(32)
-  contentHash      String @map("content_hash") @db.VarChar(64)
+  versionNo                         Int     @map("version_no")
+  algorithmVersion                  String  @map("algorithm_version") @db.VarChar(32)
+  contentHash                       String  @map("content_hash") @db.VarChar(64)
+  originType                        String  @default("taste_engine") @map("origin_type") @db.VarChar(24)
+  parentPersonalizedRecipeVersionId String? @map("parent_personalized_recipe_version_id") @db.Uuid
 
   adjustmentJson Json     @map("adjustment_json")
   snapshotJson   Json     @map("snapshot_json")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recipe            Recipe        @relation(fields: [recipeId], references: [id], onDelete: Cascade)
-  baseRecipeVersion RecipeVersion @relation(fields: [baseRecipeVersionId], references: [id], onDelete: Restrict)
-  tasteProfile      TasteProfile  @relation(fields: [tasteProfileId], references: [id], onDelete: Restrict)
+  user                            User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe                          Recipe                      @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  baseRecipeVersion               RecipeVersion               @relation(fields: [baseRecipeVersionId], references: [id], onDelete: Restrict)
+  tasteProfile                    TasteProfile                @relation(fields: [tasteProfileId], references: [id], onDelete: Restrict)
+  parentPersonalizedRecipeVersion PersonalizedRecipeVersion?  @relation("PersonalizedVersionDerivation", fields: [parentPersonalizedRecipeVersionId], references: [id], onDelete: Restrict)
+  derivedVersions                 PersonalizedRecipeVersion[] @relation("PersonalizedVersionDerivation")
 
-  cookSessions CookSession[]
+  cookSessions       CookSession[]
+  decisionsAsSource  PersonalizedAdjustmentDecision[] @relation("AdjustmentDecisionSource")
+  decisionsAsResult  PersonalizedAdjustmentDecision[] @relation("AdjustmentDecisionResult")
+  bestForPreferences UserRecipePreference[]
 
   @@unique([userId, recipeId, versionNo])
   @@unique([userId, recipeId, contentHash])
   @@index([userId, recipeId, createdAt])
+  @@index([parentPersonalizedRecipeVersionId])
   @@map("personalized_recipe_versions")
+}
+
+model PersonalizedAdjustmentDecision {
+  id                                String   @id @default(uuid()) @db.Uuid
+  userId                            String   @map("user_id") @db.Uuid
+  recipeId                          String   @map("recipe_id") @db.Uuid
+  sourcePersonalizedRecipeVersionId String   @map("source_personalized_recipe_version_id") @db.Uuid
+  resultPersonalizedRecipeVersionId String?  @map("result_personalized_recipe_version_id") @db.Uuid
+  ingredientId                      String   @map("ingredient_id") @db.Uuid
+  action                            String   @db.VarChar(16)
+  editedQuantity                    Decimal? @map("edited_quantity") @db.Decimal(10, 3)
+  createdAt                         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user          User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe        Recipe                     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  sourceVersion PersonalizedRecipeVersion  @relation("AdjustmentDecisionSource", fields: [sourcePersonalizedRecipeVersionId], references: [id], onDelete: Restrict)
+  resultVersion PersonalizedRecipeVersion? @relation("AdjustmentDecisionResult", fields: [resultPersonalizedRecipeVersionId], references: [id], onDelete: Restrict)
+  ingredient    Ingredient                 @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@index([userId, recipeId, createdAt])
+  @@index([sourcePersonalizedRecipeVersionId, ingredientId, createdAt])
+  @@map("personalized_adjustment_decisions")
+}
+
+model UserRecipePreference {
+  id                              String   @id @default(uuid()) @db.Uuid
+  userId                          String   @map("user_id") @db.Uuid
+  recipeId                        String   @map("recipe_id") @db.Uuid
+  bestPersonalizedRecipeVersionId String?  @map("best_personalized_recipe_version_id") @db.Uuid
+  createdAt                       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user        User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe      Recipe                     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  bestVersion PersonalizedRecipeVersion? @relation(fields: [bestPersonalizedRecipeVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, recipeId])
+  @@index([bestPersonalizedRecipeVersionId])
+  @@map("user_recipe_preferences")
 }

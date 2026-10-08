@@ -14,6 +14,7 @@ describe('Phase 8 learning controls and version decisions (database integration)
   const runId = randomUUID().replace(/-/g, '');
   const slug = `phase8-recipe-${runId}`;
   const ingredientSlug = `phase8-seasoning-${runId}`;
+  const secondIngredientSlug = `phase8-seasoning-b-${runId}`;
   const prisma = new PrismaService();
   const feedback = new FeedbackService(prisma);
   const personalization = new PersonalizationService(prisma);
@@ -22,6 +23,7 @@ describe('Phase 8 learning controls and version decisions (database integration)
   let recipeId: string;
   let versionId: string;
   let ingredientId: string;
+  let secondIngredientId: string;
 
   async function createUser() {
     const user = await prisma.user.create({
@@ -54,6 +56,10 @@ describe('Phase 8 learning controls and version decisions (database integration)
       data: { slug: ingredientSlug, canonicalName: 'Gia vị Phase 8', category: 'seasoning' },
     });
     ingredientId = ingredient.id;
+    const secondIngredient = await prisma.ingredient.create({
+      data: { slug: secondIngredientSlug, canonicalName: 'Gia vị B Phase 8', category: 'seasoning' },
+    });
+    secondIngredientId = secondIngredient.id;
     const recipe = await prisma.recipe.create({
       data: { slug, canonicalTitle: 'Món Phase 8', status: 'published' },
     });
@@ -78,6 +84,15 @@ describe('Phase 8 learning controls and version decisions (database integration)
         sortOrder: 1,
       },
     });
+    await prisma.recipeIngredient.create({
+      data: {
+        recipeVersionId: version.id,
+        ingredientId: secondIngredientId,
+        quantity: 20,
+        unit: 'ml',
+        sortOrder: 2,
+      },
+    });
     await prisma.recipeStep.create({
       data: { recipeVersionId: version.id, stepNo: 1, instruction: 'Nấu đúng snapshot.' },
     });
@@ -86,6 +101,16 @@ describe('Phase 8 learning controls and version decisions (database integration)
         recipeVersionId: version.id,
         ingredientId,
         dimensionKey: 'saltiness',
+        sensitivity: 0.5,
+        minFactor: 0.75,
+        maxFactor: 1.25,
+      },
+    });
+    await prisma.recipeAdjustmentRule.create({
+      data: {
+        recipeVersionId: version.id,
+        ingredientId: secondIngredientId,
+        dimensionKey: 'sweetness',
         sensitivity: 0.5,
         minFactor: 0.75,
         maxFactor: 1.25,
@@ -109,7 +134,7 @@ describe('Phase 8 learning controls and version decisions (database integration)
     await prisma.tasteDimension.deleteMany({ where: { tasteProfileId: { in: profileIds } } });
     await prisma.tasteProfile.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.recipe.delete({ where: { id: recipeId } });
-    await prisma.ingredient.delete({ where: { id: ingredientId } });
+    await prisma.ingredient.deleteMany({ where: { id: { in: [ingredientId, secondIngredientId] } } });
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     await prisma.$disconnect();
   });
@@ -336,6 +361,101 @@ describe('Phase 8 learning controls and version decisions (database integration)
     expect(cooked.data.snapshot.ingredients[0].quantity).toBe(20);
     await personalization.unpinBest(user.id, slug);
     expect((await personalization.overview(user.id, slug)).data.bestVersion).toBeNull();
+  });
+
+  it('composes chained decisions on the immediate active source without losing prior edits', async () => {
+    const { user, profile } = await createUser();
+    await prisma.tasteDimension.createMany({
+      data: [
+        {
+          tasteProfileId: profile.id, dimensionKey: 'saltiness', score: 1,
+          confidence: 1, effectiveWeight: 5, sampleCount: 5,
+        },
+        {
+          tasteProfileId: profile.id, dimensionKey: 'sweetness', score: 1,
+          confidence: 1, effectiveWeight: 5, sampleCount: 5,
+        },
+      ],
+    });
+    const engineVersion = await personalization.createVersion(user.id, slug);
+    const engineSnapshot = structuredClone(engineVersion.data.snapshot) as unknown as {
+      ingredients: Array<{ slug: string; quantity: number }>;
+      adjustments: Array<{ ingredientSlug: string; reviewStatus?: string }>;
+    };
+    expect(engineSnapshot.ingredients.find(({ slug: value }) => value === ingredientSlug)?.quantity).toBe(12.5);
+    expect(engineSnapshot.ingredients.find(({ slug: value }) => value === secondIngredientSlug)?.quantity).toBe(25);
+
+    const editA = await personalization.decide(
+      user.id, slug, engineVersion.data.id, ingredientSlug, 'EDIT', 11,
+    );
+    const v5 = editA.data.resultVersion!;
+    const v5Snapshot = structuredClone(v5.snapshot) as unknown as {
+      ingredients: Array<{ slug: string; quantity: number }>;
+      adjustments: Array<{ ingredientSlug: string; reviewStatus?: string }>;
+    };
+    expect(v5.parentPersonalizedRecipeVersionId).toBe(engineVersion.data.id);
+    expect(v5Snapshot.ingredients.find(({ slug: value }) => value === ingredientSlug)?.quantity).toBe(11);
+    expect(v5Snapshot.ingredients.find(({ slug: value }) => value === secondIngredientSlug)?.quantity).toBe(25);
+    expect(v5Snapshot.adjustments.find(({ ingredientSlug: value }) => value === ingredientSlug))
+      .toMatchObject({ reviewStatus: 'edited' });
+    expect(v5Snapshot.adjustments.find(({ ingredientSlug: value }) => value === secondIngredientSlug))
+      .toMatchObject({ reviewStatus: 'pending' });
+
+    const rejectB = await personalization.decide(
+      user.id, slug, v5.id, secondIngredientSlug, 'REJECT',
+    );
+    const v6 = rejectB.data.resultVersion!;
+    const v6Snapshot = v6.snapshot as unknown as {
+      ingredients: Array<{ slug: string; quantity: number }>;
+      adjustments: Array<{ ingredientSlug: string; reviewStatus?: string }>;
+    };
+    expect(v6.parentPersonalizedRecipeVersionId).toBe(v5.id);
+    expect(v6Snapshot.ingredients.find(({ slug: value }) => value === ingredientSlug)?.quantity).toBe(11);
+    expect(v6Snapshot.ingredients.find(({ slug: value }) => value === secondIngredientSlug)?.quantity).toBe(20);
+    expect(v6Snapshot.adjustments).toEqual([
+      expect.objectContaining({ ingredientSlug, reviewStatus: 'edited' }),
+    ]);
+
+    const storedEngine = await prisma.personalizedRecipeVersion.findUniqueOrThrow({
+      where: { id: engineVersion.data.id },
+    });
+    const storedV5 = await prisma.personalizedRecipeVersion.findUniqueOrThrow({ where: { id: v5.id } });
+    expect(storedEngine.snapshotJson).toEqual(engineVersion.data.snapshot);
+    expect(storedV5.snapshotJson).toEqual(v5.snapshot);
+
+    const decisions = await prisma.personalizedAdjustmentDecision.findMany({
+      where: { userId: user.id }, orderBy: { createdAt: 'asc' },
+    });
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        action: 'EDIT',
+        sourcePersonalizedRecipeVersionId: engineVersion.data.id,
+        resultPersonalizedRecipeVersionId: v5.id,
+      }),
+      expect.objectContaining({
+        action: 'REJECT',
+        sourcePersonalizedRecipeVersionId: v5.id,
+        resultPersonalizedRecipeVersionId: v6.id,
+      }),
+    ]);
+
+    const countBeforeReuse = await prisma.personalizedRecipeVersion.count({
+      where: { userId: user.id, recipeId },
+    });
+    const reused = await personalization.decide(
+      user.id, slug, v5.id, secondIngredientSlug, 'REJECT',
+    );
+    expect(reused.data.resultVersion?.id).toBe(v6.id);
+    expect(await prisma.personalizedRecipeVersion.count({
+      where: { userId: user.id, recipeId },
+    })).toBe(countBeforeReuse);
+    expect(await prisma.personalizedAdjustmentDecision.count({
+      where: {
+        userId: user.id,
+        sourcePersonalizedRecipeVersionId: v5.id,
+        resultPersonalizedRecipeVersionId: v6.id,
+      },
+    })).toBe(2);
   });
 
   it('keeps existing rows marked as engine provenance without a fabricated parent', async () => {

@@ -1,11 +1,7 @@
-import {
-  ValidationPipe,
-} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ApiExceptionFilter } from './http/api-exception.filter';
-import { RequestIdInterceptor } from './http/request-id.interceptor';
+import { configureHttp } from './http/configure-http';
 
 async function bootstrap(): Promise<void> {
   const app =
@@ -14,30 +10,7 @@ async function bootstrap(): Promise<void> {
   const config =
     app.get(ConfigService);
 
-  app.setGlobalPrefix('v1');
-
-  app.useGlobalPipes(
-    new ValidationPipe({
-      transform: true,
-      whitelist: true,
-      forbidNonWhitelisted: true,
-    }),
-  );
-
-  app.useGlobalFilters(new ApiExceptionFilter());
-  app.useGlobalInterceptors(new RequestIdInterceptor());
-
-  const origins =
-    config
-      .get<string>('CORS_ORIGIN', '')
-      .split(',')
-      .map((value) => value.trim())
-      .filter(Boolean);
-
-  app.enableCors({
-    origin: origins,
-    credentials: true,
-  });
+  configureHttp(app, config);
 
   app.enableShutdownHooks();
 

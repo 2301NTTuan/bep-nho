@@ -14,10 +14,22 @@ export class CurrentUserService {
       throw new NotFoundException('Current user was not found.');
     }
 
+    return this.resolveById(user.id);
+  }
+
+  async resolveById(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Current user was not found.');
+    }
+
     const tasteProfile = await this.prisma.tasteProfile.findUnique({
       where: {
         userId_algorithmVersion: {
-          userId: user.id,
+          userId,
           algorithmVersion: 'taste-v1',
         },
       },

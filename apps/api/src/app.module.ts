@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { AuthModule } from './auth/auth.module';
 import { envValidationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
@@ -8,6 +10,7 @@ import { CookSessionsModule } from './cook-sessions/cook-sessions.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { PersonalizationModule } from './personalization/personalization.module';
 import { DevModule } from './dev/dev.module';
+import { OriginGuard } from './http/origin.guard';
 
 @Module({
   imports: [
@@ -27,6 +30,7 @@ import { DevModule } from './dev/dev.module';
     }),
 
     DatabaseModule,
+    AuthModule,
     HealthModule,
     RecipesModule,
     CookSessionsModule,
@@ -35,6 +39,12 @@ import { DevModule } from './dev/dev.module';
     ...(process.env.NODE_ENV === 'production'
       ? []
       : [DevModule]),
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: OriginGuard,
+    },
   ],
 })
 export class AppModule {}

@@ -3,6 +3,7 @@ import {
 } from '@nestjs/common';
 
 import { IdentityModule } from '../identity/identity.module';
+import { AuthModule } from '../auth/auth.module';
 
 import {
   DevController,
@@ -11,6 +12,7 @@ import {
 @Module({
   imports: [
     IdentityModule,
+    AuthModule,
   ],
 
   controllers: [

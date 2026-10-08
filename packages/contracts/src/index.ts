@@ -59,7 +59,7 @@ export type PersonalizedVersion = {
 export type PersonalizedResponse = ApiEnvelope<PersonalizedVersion>;
 
 export type CurrentUserContext = {
-  environment: string;
+  environment?: string;
   user: { id: string; locale: string; timezone: string };
   tasteProfile: {
     id: string; sampleCount: number; maturityScore: number;
@@ -67,6 +67,8 @@ export type CurrentUserContext = {
   } | null;
 };
 export type CurrentUserResponse = ApiEnvelope<CurrentUserContext>;
+export type AuthCredentials = { email: string; password: string };
+export type LogoutResponse = ApiEnvelope<{ loggedOut: boolean }>;
 
 export type CookSessionEvent = {
   id: string; eventType: CookEventType; clientSeq: number; clientTime: string;

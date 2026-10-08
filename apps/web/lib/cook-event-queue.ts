@@ -6,13 +6,23 @@ import { ApiRequestError, apiRequest } from './api';
 
 const DATABASE = 'bep-nho-cook-v1';
 const STORE = 'events';
+const DATABASE_VERSION = 2;
+const USER_INDEX = 'userId';
+const USER_SESSION_INDEX = 'userSession';
 
 function openQueue(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DATABASE, 1);
+    const request = indexedDB.open(DATABASE, DATABASE_VERSION);
     request.onupgradeneeded = () => {
-      const store = request.result.createObjectStore(STORE, { keyPath: 'id' });
-      store.createIndex('userId', 'userId', { unique: false });
+      const store = request.result.objectStoreNames.contains(STORE)
+        ? request.transaction!.objectStore(STORE)
+        : request.result.createObjectStore(STORE, { keyPath: 'id' });
+      if (!store.indexNames.contains(USER_INDEX)) {
+        store.createIndex(USER_INDEX, 'userId', { unique: false });
+      }
+      if (!store.indexNames.contains(USER_SESSION_INDEX)) {
+        store.createIndex(USER_SESSION_INDEX, ['userId', 'cookSessionId'], { unique: false });
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -35,21 +45,29 @@ export function queueCookEvent(event: QueuedCookEvent): Promise<IDBValidKey> {
   return transact('readwrite', (store) => store.put(event));
 }
 
-export async function queuedCookEvents(userId: string): Promise<QueuedCookEvent[]> {
-  const all = await transact<QueuedCookEvent[]>('readonly', (store) => store.getAll());
-  return all.filter((event) => event.userId === userId);
+export function queuedCookEvents(userId: string, cookSessionId: string): Promise<QueuedCookEvent[]> {
+  return transact<QueuedCookEvent[]>('readonly', (store) =>
+    store.index(USER_SESSION_INDEX).getAll(IDBKeyRange.only([userId, cookSessionId])),
+  );
+}
+
+function queuedCookEventsForUser(userId: string): Promise<QueuedCookEvent[]> {
+  return transact<QueuedCookEvent[]>('readonly', (store) =>
+    store.index(USER_INDEX).getAll(IDBKeyRange.only(userId)),
+  );
 }
 
 export async function clearCookQueue(userId: string): Promise<void> {
-  const events = await queuedCookEvents(userId);
+  const events = await queuedCookEventsForUser(userId);
   await Promise.all(events.map((event) => transact('readwrite', (store) => store.delete(event.id))));
 }
 
-export async function syncCookQueue(userId: string) {
-  const events = await queuedCookEvents(userId);
+export async function syncCookQueue(userId: string, cookSessionId: string) {
+  const events = await queuedCookEvents(userId, cookSessionId);
   return reconcileCookQueue(
     events,
     userId,
+    cookSessionId,
     async (event): Promise<QueueSendResult> => {
       try {
         const response = await apiRequest<{ data: { duplicate?: boolean } }>(`/cook-sessions/${event.cookSessionId}/events`, {

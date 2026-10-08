@@ -113,8 +113,45 @@ export type SequencedCookEvent = {
   payload: unknown;
 };
 
+export type TimerStartedPayload = {
+  stepNo: number;
+  durationSeconds: number;
+  startedAt: string;
+};
+
 export function nextClientSequence(serverEvents: SequencedCookEvent[], localEvents: SequencedCookEvent[]): number {
   return Math.max(0, ...serverEvents.map((event) => event.clientSeq), ...localEvents.map((event) => event.clientSeq)) + 1;
+}
+
+export type CookEventEmissionCoordinator = {
+  run<T>(
+    cookSessionId: string,
+    serverEvents: SequencedCookEvent[],
+    localEvents: SequencedCookEvent[],
+    persist: (clientSeq: number) => Promise<T>,
+  ): Promise<T>;
+};
+
+export function createCookEventEmissionCoordinator(): CookEventEmissionCoordinator {
+  const tails = new Map<string, Promise<void>>();
+  const highWaterMarks = new Map<string, number>();
+
+  return {
+    run(cookSessionId, serverEvents, localEvents, persist) {
+      const previous = tails.get(cookSessionId) ?? Promise.resolve();
+      const emission = previous
+        .catch(() => undefined)
+        .then(async () => {
+          const observedMaximum = nextClientSequence(serverEvents, localEvents) - 1;
+          const next = Math.max(observedMaximum, highWaterMarks.get(cookSessionId) ?? 0) + 1;
+          highWaterMarks.set(cookSessionId, next);
+          return persist(next);
+        });
+
+      tails.set(cookSessionId, emission.then(() => undefined));
+      return emission;
+    },
+  };
 }
 
 export function orderCookEvents<T extends SequencedCookEvent>(events: T[]): T[] {
@@ -147,9 +184,16 @@ export function remainingTimerSeconds(
   if (!latestStart) return null;
   const completedAfterStart = ordered.some((event) => event.eventType === 'timer_completed' && event.clientSeq > latestStart.clientSeq);
   if (completedAfterStart) return 0;
-  const duration = (latestStart.payload as { durationSeconds?: unknown }).durationSeconds;
+  const payload = latestStart.payload as Partial<TimerStartedPayload>;
+  const duration = payload.durationSeconds;
   if (typeof duration !== 'number' || duration <= 0) return null;
-  const startedAt = Date.parse(latestStart.serverTime ?? latestStart.clientTime);
+  const logicalStartedAt = typeof payload.startedAt === 'string'
+    ? Date.parse(payload.startedAt)
+    : Number.NaN;
+  const startedAt = Number.isFinite(logicalStartedAt)
+    ? logicalStartedAt
+    : Date.parse(latestStart.serverTime ?? latestStart.clientTime);
+  if (!Number.isFinite(startedAt)) return null;
   return Math.max(0, Math.ceil(duration - (nowMs - startedAt) / 1000));
 }
 
@@ -162,13 +206,25 @@ export type QueuedCookEvent = SequencedCookEvent & {
 
 export type QueueSendResult = 'acknowledged' | 'duplicate' | 'retry' | 'auth' | 'rejected';
 
+export function selectCookQueueEvents(
+  events: QueuedCookEvent[],
+  currentUserId: string,
+  cookSessionId?: string,
+): QueuedCookEvent[] {
+  return orderCookEvents(events.filter((event) =>
+    event.userId === currentUserId
+    && (cookSessionId === undefined || event.cookSessionId === cookSessionId),
+  ));
+}
+
 export async function reconcileCookQueue(
   events: QueuedCookEvent[],
   currentUserId: string,
+  cookSessionId: string,
   send: (event: QueuedCookEvent) => Promise<QueueSendResult>,
   acknowledge: (event: QueuedCookEvent) => Promise<void>,
 ): Promise<{ acknowledged: number; retained: number; stopped: QueueSendResult | null }> {
-  const owned = orderCookEvents(events.filter((event) => event.userId === currentUserId));
+  const owned = selectCookQueueEvents(events, currentUserId, cookSessionId);
   let acknowledged = 0;
   let stopped: QueueSendResult | null = null;
 

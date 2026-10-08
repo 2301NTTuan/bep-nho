@@ -68,9 +68,14 @@ export class CookSessionsService {
         ? previous.scalingMode
         : row.scalingMode;
       const scalingExponent = numberOr(previous?.scalingExponent, Number(row.scalingExponent));
+      const databaseRoundingIncrement = row.roundingIncrement === null
+        ? null
+        : Number(row.roundingIncrement);
       const roundingIncrement = previous?.roundingIncrement === null
         ? null
-        : numberOr(previous?.roundingIncrement, row.roundingIncrement === null ? 0.001 : Number(row.roundingIncrement));
+        : typeof previous?.roundingIncrement === 'number' && Number.isFinite(previous.roundingIncrement)
+          ? previous.roundingIncrement
+          : databaseRoundingIncrement;
       const scaled = scaleIngredientQuantity(
         {
           quantity: canonicalQuantity,

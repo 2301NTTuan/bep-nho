@@ -5,12 +5,12 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   completedStepNumbers,
+  createCookEventEmissionCoordinator,
   currentStepIndex,
-  nextClientSequence,
   orderCookEvents,
   remainingTimerSeconds,
 } from '@bep-nho/domain';
-import type { QueuedCookEvent, SequencedCookEvent } from '@bep-nho/domain';
+import type { QueuedCookEvent, SequencedCookEvent, TimerStartedPayload } from '@bep-nho/domain';
 import { apiRequest, getErrorMessage } from '../../../lib/api';
 import { queueCookEvent, queuedCookEvents, syncCookQueue } from '../../../lib/cook-event-queue';
 import { loadCurrentUser } from '../../../lib/current-user';
@@ -53,14 +53,15 @@ export default function CookPage() {
   const [technicalFlags, setTechnicalFlags] = useState<string[]>([]);
   const [note, setNote] = useState('');
   const timerCompletion = useRef<string | null>(null);
+  const emissionCoordinator = useRef(createCookEventEmissionCoordinator());
 
   const refresh = useCallback(async (currentUser: CurrentUserContext) => {
     const [remote, local] = await Promise.all([
       apiRequest<CookSessionResponse>(`/cook-sessions/${id}`),
-      queuedCookEvents(currentUser.user.id),
+      queuedCookEvents(currentUser.user.id, id),
     ]);
     setSession(remote);
-    setQueued(local.filter((event) => event.cookSessionId === id));
+    setQueued(local);
     if (remote.data.status === 'completed') setStage('feedback');
   }, [id]);
 
@@ -71,7 +72,7 @@ export default function CookPage() {
         const current = await loadCurrentUser();
         if (!active) return;
         setUser(current);
-        await syncCookQueue(current.user.id);
+        await syncCookQueue(current.user.id, id);
         if (active) await refresh(current);
       } catch (cause) {
         if (active) setError(getErrorMessage(cause, 'Không mở được phiên nấu.'));
@@ -89,11 +90,11 @@ export default function CookPage() {
   useEffect(() => {
     if (!user) return;
     const online = () => {
-      void syncCookQueue(user.user.id).then(() => refresh(user)).catch(() => undefined);
+      void syncCookQueue(user.user.id, id).then(() => refresh(user)).catch(() => undefined);
     };
     window.addEventListener('online', online);
     return () => window.removeEventListener('online', online);
-  }, [refresh, user]);
+  }, [id, refresh, user]);
 
   const events = useMemo(() => {
     const server = session?.data.events ?? [];
@@ -109,23 +110,33 @@ export default function CookPage() {
   const emit = useCallback(async (eventType: string, payload: Record<string, unknown>) => {
     if (!user || !session) return false;
     setSyncState('saving');
-    const currentLocal = await queuedCookEvents(user.user.id);
-    const localForSession = currentLocal.filter((event) => event.cookSessionId === session.data.id);
-    const clientSeq = nextClientSequence(session.data.events, localForSession);
-    const event: QueuedCookEvent = {
-      id: `${session.data.id}:${clientSeq}`,
-      userId: user.user.id,
-      cookSessionId: session.data.id,
-      eventType,
-      clientSeq,
-      clientTime: new Date().toISOString(),
-      payload,
-      createdAt: new Date().toISOString(),
-    };
-    await queueCookEvent(event);
+    const currentLocal = await queuedCookEvents(user.user.id, session.data.id);
+    const event = await emissionCoordinator.current.run(
+      session.data.id,
+      session.data.events,
+      currentLocal,
+      async (clientSeq) => {
+        const clientTime = new Date().toISOString();
+        const stablePayload = eventType === 'timer_started'
+          ? { ...payload, startedAt: payload.startedAt ?? clientTime }
+          : payload;
+        const queuedEvent: QueuedCookEvent = {
+          id: `${session.data.id}:${clientSeq}`,
+          userId: user.user.id,
+          cookSessionId: session.data.id,
+          eventType,
+          clientSeq,
+          clientTime,
+          payload: stablePayload,
+          createdAt: new Date().toISOString(),
+        };
+        await queueCookEvent(queuedEvent);
+        return queuedEvent;
+      },
+    );
     setQueued((current) => orderCookEvents([...current, event]));
     setSyncState('syncing');
-    const result = await syncCookQueue(user.user.id);
+    const result = await syncCookQueue(user.user.id, session.data.id);
     if (result.retained > 0) {
       setSyncState(result.stopped === 'retry' ? 'offline' : 'online');
       if (result.stopped === 'auth') {
@@ -159,7 +170,7 @@ export default function CookPage() {
     if (!user || !session) return;
     setBusy(true); setError(null);
     try {
-      const sync = await syncCookQueue(user.user.id);
+      const sync = await syncCookQueue(user.user.id, session.data.id);
       if (sync.retained > 0) {
         setNotice('Đã lưu bước cuối trên thiết bị. Kết nối mạng để hoàn tất phiên nấu.');
         return;
@@ -208,5 +219,5 @@ export default function CookPage() {
   const started = events.some((event) => event.eventType === 'step_started' && (event.payload as { stepNo?: number }).stepNo === currentStep.stepNo);
   const allCompleted = steps.every((step) => completed.has(step.stepNo));
   const syncLabel = { online: 'Online', saving: 'Đang lưu…', syncing: 'Đang đồng bộ…', saved: 'Đã lưu', offline: 'Offline · đã lưu cục bộ' }[syncState];
-  return <main className="cookMode"><header className="cookTopbar"><Link href={`/recipes/${snapshot.recipe.slug}`} className="cookBrand">BN</Link><div><span>Đang nấu · {snapshot.servings} phần</span><strong>{snapshot.recipe.title}</strong></div><span className={`syncStatus ${syncState}`}>{syncLabel}</span><span className="pill personalized">{snapshot.personalizedVersion ? `Của bạn · V${snapshot.personalizedVersion.versionNo}` : `Bản chuẩn · V${snapshot.canonicalVersion.versionNo}`}</span></header><div className="cookProgress"><span style={{ width: `${progress}%` }} /></div><section className="cookWorkspace">{notice && <div className="offlineNotice">{notice}</div>}<div className="cookStepMeta"><span>Bước {stepIndex + 1} / {steps.length}</span><b>{completed.size} bước đã xong · {queued.length} chờ đồng bộ</b></div><div className="cookLayout"><article className="cookCard"><div className="stepBadge">{String(currentStep.stepNo).padStart(2, '0')}</div><div className="cookCopy">{currentStep.heatLevel && <div className="smallLabel">Lửa {currentStep.heatLevel}</div>}<h1>{currentStep.instruction}</h1>{currentStep.durationSeconds && <div className="timerControls">{remaining === null ? <button className="timerButton" type="button" onClick={() => void emit('timer_started', { stepNo: currentStep.stepNo, durationSeconds: currentStep.durationSeconds })}>Bắt đầu hẹn giờ · {clockText(currentStep.durationSeconds)}</button> : <strong className={remaining === 0 ? 'timerDone' : 'timerClock'}>{remaining === 0 ? 'Hết giờ' : clockText(remaining)}</strong>}</div>}{currentStep.tip && <aside className="tipBox"><span>Mẹo từ Bếp Nhớ</span><p>{currentStep.tip}</p></aside>}{error && <div className="inlineError">{error}</div>}</div></article><aside className="cookIngredients"><div className="smallLabel">Snapshot nguyên liệu</div><ul>{snapshot.ingredients.map((item) => <li key={item.id}><span>{item.name}</span><b>{formatQuantity(item.quantity)} {item.unit}</b></li>)}</ul></aside></div><div className="cookActions"><Link className="button secondary" href={`/recipes/${snapshot.recipe.slug}`}>Thoát màn hình</Link>{!started && <button className="button secondary" type="button" onClick={() => void emit('step_started', { stepNo: currentStep.stepNo })}>Bắt đầu bước</button>}{allCompleted ? <button className="button cookNext" type="button" disabled={busy} onClick={() => void completeSession()}>Hoàn thành món →</button> : <button className="button cookNext" type="button" onClick={() => void emit('step_completed', { stepNo: currentStep.stepNo })}>Xong bước này →</button>}</div></section></main>;
+  return <main className="cookMode"><header className="cookTopbar"><Link href={`/recipes/${snapshot.recipe.slug}`} className="cookBrand">BN</Link><div><span>Đang nấu · {snapshot.servings} phần</span><strong>{snapshot.recipe.title}</strong></div><span className={`syncStatus ${syncState}`}>{syncLabel}</span><span className="pill personalized">{snapshot.personalizedVersion ? `Của bạn · V${snapshot.personalizedVersion.versionNo}` : `Bản chuẩn · V${snapshot.canonicalVersion.versionNo}`}</span></header><div className="cookProgress"><span style={{ width: `${progress}%` }} /></div><section className="cookWorkspace">{notice && <div className="offlineNotice">{notice}</div>}<div className="cookStepMeta"><span>Bước {stepIndex + 1} / {steps.length}</span><b>{completed.size} bước đã xong · {queued.length} chờ đồng bộ</b></div><div className="cookLayout"><article className="cookCard"><div className="stepBadge">{String(currentStep.stepNo).padStart(2, '0')}</div><div className="cookCopy">{currentStep.heatLevel && <div className="smallLabel">Lửa {currentStep.heatLevel}</div>}<h1>{currentStep.instruction}</h1>{currentStep.durationSeconds && <div className="timerControls">{remaining === null ? <button className="timerButton" type="button" onClick={() => { const startedAt = new Date().toISOString(); void emit('timer_started', { stepNo: currentStep.stepNo, durationSeconds: currentStep.durationSeconds!, startedAt } satisfies TimerStartedPayload); }}>Bắt đầu hẹn giờ · {clockText(currentStep.durationSeconds)}</button> : <strong className={remaining === 0 ? 'timerDone' : 'timerClock'}>{remaining === 0 ? 'Hết giờ' : clockText(remaining)}</strong>}</div>}{currentStep.tip && <aside className="tipBox"><span>Mẹo từ Bếp Nhớ</span><p>{currentStep.tip}</p></aside>}{error && <div className="inlineError">{error}</div>}</div></article><aside className="cookIngredients"><div className="smallLabel">Snapshot nguyên liệu</div><ul>{snapshot.ingredients.map((item) => <li key={item.id}><span>{item.name}</span><b>{formatQuantity(item.quantity)} {item.unit}</b></li>)}</ul></aside></div><div className="cookActions"><Link className="button secondary" href={`/recipes/${snapshot.recipe.slug}`}>Thoát màn hình</Link>{!started && <button className="button secondary" type="button" onClick={() => void emit('step_started', { stepNo: currentStep.stepNo })}>Bắt đầu bước</button>}{allCompleted ? <button className="button cookNext" type="button" disabled={busy} onClick={() => void completeSession()}>Hoàn thành món →</button> : <button className="button cookNext" type="button" onClick={() => void emit('step_completed', { stepNo: currentStep.stepNo })}>Xong bước này →</button>}</div></section></main>;
 }

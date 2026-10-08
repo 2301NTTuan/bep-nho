@@ -291,6 +291,19 @@ describe('authentication, ownership, and origin boundaries (HTTP integration)', 
     expect(start.status).toBe(201);
     const sessionId = (await json(start)).data?.id as string;
 
+    expect((await request('/me/cook-sessions/active')).status).toBe(401);
+    expect((await request('/me/cook-sessions/active', { cookie: userB.cookie })).status).toBe(404);
+    const activeForA = await request('/me/cook-sessions/active', { cookie: userA.cookie });
+    expect(activeForA.status).toBe(200);
+    expect((await json(activeForA)).data?.id).toBe(sessionId);
+
+    const invalidServings = await request('/cook-sessions', {
+      method: 'POST',
+      cookie: userA.cookie,
+      body: JSON.stringify({ recipeSlug: slug, servings: 1.5 }),
+    });
+    expect(invalidServings.status).toBe(400);
+
     expect((await request(`/cook-sessions/${sessionId}`, { cookie: userB.cookie })).status).toBe(404);
     expect((await request(`/cook-sessions/${sessionId}/events`, {
       method: 'POST',
@@ -326,6 +339,7 @@ describe('authentication, ownership, and origin boundaries (HTTP integration)', 
       method: 'POST',
       cookie: userA.cookie,
     })).status).toBe(200);
+    expect((await request('/me/cook-sessions/active', { cookie: userA.cookie })).status).toBe(404);
     expect((await request(`/cook-sessions/${sessionId}/feedback`, {
       method: 'POST',
       cookie: userA.cookie,

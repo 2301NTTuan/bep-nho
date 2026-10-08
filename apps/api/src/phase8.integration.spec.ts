@@ -1,0 +1,280 @@
+import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { config } from 'dotenv';
+import { CookSessionsService } from './cook-sessions/cook-sessions.service';
+import { PrismaService } from './database/prisma.service';
+import { FeedbackService } from './feedback/feedback.service';
+import { PersonalizationService } from './personalization/personalization.service';
+
+config({ path: resolve(__dirname, '../../../.env') });
+
+describe('Phase 8 learning controls and version decisions (database integration)', () => {
+  const runId = randomUUID().replace(/-/g, '');
+  const slug = `phase8-recipe-${runId}`;
+  const ingredientSlug = `phase8-seasoning-${runId}`;
+  const prisma = new PrismaService();
+  const feedback = new FeedbackService(prisma);
+  const personalization = new PersonalizationService(prisma);
+  const cooking = new CookSessionsService(prisma);
+  const userIds: string[] = [];
+  let recipeId: string;
+  let versionId: string;
+  let ingredientId: string;
+
+  async function createUser() {
+    const user = await prisma.user.create({
+      data: { authSubject: `phase8-user-${runId}-${randomUUID()}` },
+    });
+    userIds.push(user.id);
+    const profile = await prisma.tasteProfile.create({
+      data: { userId: user.id, algorithmVersion: 'taste-v1' },
+    });
+    return { user, profile };
+  }
+
+  async function submitFeedback(
+    userId: string,
+    dimensions: Record<string, number>,
+    options: { technicalFlags?: string[]; privateNote?: string } = {},
+  ) {
+    const session = await cooking.start(userId, { recipeSlug: slug });
+    await cooking.complete(userId, session.data.id);
+    return feedback.submit(userId, session.data.id, {
+      dimensions,
+      technicalFlags: options.technicalFlags,
+      privateNote: options.privateNote,
+    });
+  }
+
+  beforeAll(async () => {
+    await prisma.$connect();
+    const ingredient = await prisma.ingredient.create({
+      data: { slug: ingredientSlug, canonicalName: 'Gia vị Phase 8', category: 'seasoning' },
+    });
+    ingredientId = ingredient.id;
+    const recipe = await prisma.recipe.create({
+      data: { slug, canonicalTitle: 'Món Phase 8', status: 'published' },
+    });
+    recipeId = recipe.id;
+    const version = await prisma.recipeVersion.create({
+      data: {
+        recipeId,
+        versionNo: 1,
+        servings: 2,
+        summary: 'Kiểm thử quyền kiểm soát học.',
+        contentHash: runId,
+        publishedAt: new Date(),
+      },
+    });
+    versionId = version.id;
+    await prisma.recipeIngredient.create({
+      data: {
+        recipeVersionId: version.id,
+        ingredientId,
+        quantity: 10,
+        unit: 'g',
+        sortOrder: 1,
+      },
+    });
+    await prisma.recipeStep.create({
+      data: { recipeVersionId: version.id, stepNo: 1, instruction: 'Nấu đúng snapshot.' },
+    });
+    await prisma.recipeAdjustmentRule.create({
+      data: {
+        recipeVersionId: version.id,
+        ingredientId,
+        dimensionKey: 'saltiness',
+        sensitivity: 0.5,
+        minFactor: 0.75,
+        maxFactor: 1.25,
+      },
+    });
+  });
+
+  afterAll(async () => {
+    const profiles = await prisma.tasteProfile.findMany({
+      where: { userId: { in: userIds } }, select: { id: true },
+    });
+    const profileIds = profiles.map(({ id }) => id);
+    await prisma.userRecipePreference.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.personalizedAdjustmentDecision.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.tasteControlEvent.deleteMany({ where: { tasteProfileId: { in: profileIds } } });
+    await prisma.tasteSignal.deleteMany({ where: { tasteProfileId: { in: profileIds } } });
+    await prisma.cookFeedback.deleteMany({ where: { cookSession: { userId: { in: userIds } } } });
+    await prisma.cookEvent.deleteMany({ where: { cookSession: { userId: { in: userIds } } } });
+    await prisma.cookSession.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.personalizedRecipeVersion.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.tasteDimension.deleteMany({ where: { tasteProfileId: { in: profileIds } } });
+    await prisma.tasteProfile.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.recipe.delete({ where: { id: recipeId } });
+    await prisma.ingredient.delete({ where: { id: ingredientId } });
+    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    await prisma.$disconnect();
+  });
+
+  it('applies zero-confidence manual overrides including explicit zero and audits clear', async () => {
+    const { user } = await createUser();
+    const zero = await feedback.updateOverride(user.id, 'saltiness', 0);
+    expect(zero.data.dimensions.find(({ key }) => key === 'saltiness')).toMatchObject({
+      score: 0,
+      confidence: 0,
+      manualOverride: 0,
+      effectiveScore: 0,
+      effectiveConfidence: 1,
+    });
+
+    await feedback.updateOverride(user.id, 'saltiness', 1);
+    const generated = await personalization.createVersion(user.id, slug);
+    const snapshot = generated.data.snapshot as unknown as { ingredients: Array<{ quantity: number }> };
+    expect(generated.data.algorithmVersion).toBe('personalize-v3');
+    expect(generated.data.originType).toBe('taste_engine');
+    expect(snapshot.ingredients[0].quantity).toBe(12.5);
+
+    const cleared = await feedback.updateOverride(user.id, 'saltiness', null);
+    expect(cleared.data.dimensions.find(({ key }) => key === 'saltiness')).toMatchObject({
+      manualOverride: null,
+      effectiveConfidence: 0,
+    });
+    expect(await prisma.tasteControlEvent.findMany({
+      where: { tasteProfile: { userId: user.id }, dimensionKey: 'saltiness' },
+      orderBy: { createdAt: 'asc' },
+    })).toHaveLength(3);
+  });
+
+  it('resets one dimension without deleting evidence and deterministically replays later valid signals', async () => {
+    const { user, profile } = await createUser();
+    await submitFeedback(user.id, { saltiness: 0.8, sweetness: 0.4 }, { privateNote: 'Ghi chú riêng Phase 8' });
+    await feedback.updateOverride(user.id, 'saltiness', -0.2);
+    const beforeProfile = await prisma.tasteProfile.findUniqueOrThrow({ where: { id: profile.id } });
+    const beforeSignals = await prisma.tasteSignal.count({ where: { tasteProfileId: profile.id } });
+
+    const reset = await feedback.resetDimension(user.id, 'saltiness');
+    expect(reset.data.sampleCount).toBe(beforeProfile.sampleCount);
+    expect(reset.data.dimensions.find(({ key }) => key === 'saltiness')).toMatchObject({
+      score: 0, confidence: 0, effectiveWeight: 0, sampleCount: 0, manualOverride: null,
+    });
+    expect(reset.data.dimensions.find(({ key }) => key === 'sweetness')).toMatchObject({
+      score: 0.4, sampleCount: 1,
+    });
+    expect(await prisma.tasteSignal.count({ where: { tasteProfileId: profile.id } })).toBe(beforeSignals);
+
+    await submitFeedback(user.id, { saltiness: -1 }, { privateNote: 'Sau reset' });
+    await submitFeedback(user.id, { saltiness: 1 }, { technicalFlags: ['burnt'], privateNote: 'Bị cháy' });
+    const replayed = await feedback.getTasteProfile(user.id);
+    expect(replayed.data.dimensions.find(({ key }) => key === 'saltiness')).toMatchObject({
+      score: -1, confidence: 0.2, effectiveWeight: 1, sampleCount: 1,
+    });
+    expect(replayed.data.sampleCount).toBe(beforeProfile.sampleCount + 1);
+
+    const page = await feedback.history(user.id, { limit: 2 });
+    expect(page.data).toHaveLength(2);
+    expect(page.meta.nextCursor).toEqual(expect.any(String));
+    const next = await feedback.history(user.id, { limit: 2, cursor: page.meta.nextCursor ?? undefined });
+    expect(next.data.every((event) => !page.data.some((first) => first.id === event.id))).toBe(true);
+    const full = await feedback.history(user.id, { limit: 100, dimension: 'saltiness' });
+    expect(full.data.some((event) => event.kind === 'control' && event.control?.action === 'learning_reset')).toBe(true);
+    expect(full.data.some((event) => event.kind === 'signal'
+      && event.signal.privateNote === 'Ghi chú riêng Phase 8')).toBe(true);
+    expect(full.data.some((event) => event.kind === 'signal'
+      && event.signal.qualityFactor === 0 && event.signal.excludedReason)).toBe(true);
+  });
+
+  it('records append-only decisions, reuses effective content, preserves provenance, and pins an exact best version', async () => {
+    const { user, profile } = await createUser();
+    const foreign = await createUser();
+    await prisma.tasteDimension.create({
+      data: {
+        tasteProfileId: profile.id,
+        dimensionKey: 'saltiness',
+        score: 1,
+        confidence: 1,
+        effectiveWeight: 5,
+        sampleCount: 5,
+      },
+    });
+    const source = await personalization.createVersion(user.id, slug);
+    const sourceBefore = await prisma.personalizedRecipeVersion.findUniqueOrThrow({ where: { id: source.data.id } });
+
+    const accepted = await personalization.decide(user.id, slug, source.data.id, ingredientSlug, 'ACCEPT');
+    expect(accepted.data.resultVersion).toBeNull();
+    expect(await prisma.personalizedRecipeVersion.count({ where: { userId: user.id, recipeId } })).toBe(1);
+
+    const rejected = await personalization.decide(user.id, slug, source.data.id, ingredientSlug, 'REJECT');
+    expect(rejected.data.resultVersion).toMatchObject({
+      originType: 'user_edit',
+      parentPersonalizedRecipeVersionId: source.data.id,
+    });
+    const rejectedSnapshot = rejected.data.resultVersion?.snapshot as unknown as {
+      servings: number; ingredients: Array<{ quantity: number; personalizationFactor: number }>;
+    };
+    expect(rejectedSnapshot).toMatchObject({ servings: 2 });
+    expect(rejectedSnapshot.ingredients[0]).toMatchObject({ quantity: 10, personalizationFactor: 1 });
+
+    const rejectedAgain = await personalization.decide(user.id, slug, source.data.id, ingredientSlug, 'REJECT');
+    expect(rejectedAgain.data.resultVersion?.id).toBe(rejected.data.resultVersion?.id);
+    expect(await prisma.personalizedAdjustmentDecision.count({
+      where: { sourcePersonalizedRecipeVersionId: source.data.id },
+    })).toBe(3);
+
+    const edited = await personalization.decide(user.id, slug, source.data.id, ingredientSlug, 'EDIT', 11);
+    const editedSnapshot = edited.data.resultVersion?.snapshot as unknown as {
+      servings: number; ingredients: Array<{ quantity: number }>;
+    };
+    expect(editedSnapshot.servings).toBe(2);
+    expect(editedSnapshot.ingredients[0].quantity).toBe(11);
+    const countBeforeInvalid = await prisma.personalizedRecipeVersion.count({ where: { userId: user.id } });
+    await expect(personalization.decide(user.id, slug, source.data.id, ingredientSlug, 'EDIT', 20))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(await prisma.personalizedRecipeVersion.count({ where: { userId: user.id } })).toBe(countBeforeInvalid);
+
+    const concurrent = await Promise.all([
+      personalization.decide(user.id, slug, source.data.id, ingredientSlug, 'EDIT', 11.5),
+      personalization.decide(user.id, slug, source.data.id, ingredientSlug, 'EDIT', 11.5),
+    ]);
+    expect(concurrent[0].data.resultVersion?.id).toBe(concurrent[1].data.resultVersion?.id);
+    const versionNos = (await prisma.personalizedRecipeVersion.findMany({
+      where: { userId: user.id, recipeId }, orderBy: { versionNo: 'asc' }, select: { versionNo: true },
+    })).map(({ versionNo }) => versionNo);
+    expect(new Set(versionNos).size).toBe(versionNos.length);
+
+    const sourceAfter = await prisma.personalizedRecipeVersion.findUniqueOrThrow({ where: { id: source.data.id } });
+    expect(sourceAfter.snapshotJson).toEqual(sourceBefore.snapshotJson);
+    await personalization.pinBest(user.id, slug, rejected.data.resultVersion!.id);
+    await expect(personalization.pinBest(foreign.user.id, slug, rejected.data.resultVersion!.id))
+      .rejects.toBeInstanceOf(NotFoundException);
+
+    await prisma.tasteDimension.update({
+      where: {
+        tasteProfileId_dimensionKey_scopeType_scopeId: {
+          tasteProfileId: profile.id, dimensionKey: 'saltiness', scopeType: 'global', scopeId: '',
+        },
+      },
+      data: { score: -1 },
+    });
+    const newSuggestion = await personalization.createVersion(user.id, slug);
+    const overview = await personalization.overview(user.id, slug);
+    expect(overview.data.latestEngine?.id).toBe(newSuggestion.data.id);
+    expect(overview.data.latestAny?.id).toBe(newSuggestion.data.id);
+    expect(overview.data.bestVersion?.id).toBe(rejected.data.resultVersion?.id);
+
+    const cooked = await cooking.start(user.id, {
+      recipeSlug: slug,
+      personalizedRecipeVersionId: overview.data.bestVersion!.id,
+    });
+    expect(cooked.data.snapshot.personalizedVersion?.id).toBe(overview.data.bestVersion?.id);
+    await personalization.unpinBest(user.id, slug);
+    expect((await personalization.overview(user.id, slug)).data.bestVersion).toBeNull();
+  });
+
+  it('keeps existing rows marked as engine provenance without a fabricated parent', async () => {
+    const existing = await prisma.personalizedRecipeVersion.findMany({
+      where: { userId: { notIn: userIds } },
+      take: 10,
+    });
+    expect(existing.every((version) => version.originType === 'taste_engine'
+      && version.parentPersonalizedRecipeVersionId === null)).toBe(true);
+    expect(versionId).toEqual(expect.any(String));
+  });
+});

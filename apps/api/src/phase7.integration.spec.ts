@@ -144,7 +144,7 @@ describe('Phase 7 snapshots and resumable sessions (database integration)', () =
     expect((await cooking.get(user.id, session.data.id)).data.events.map((event) => event.clientSeq)).toEqual([0, 1, 2]);
   });
 
-  it('does not mint a personalized version for serving choice and hashes title changes in personalize-v2', async () => {
+  it('does not mint a personalized version for serving choice and hashes title changes in personalize-v3', async () => {
     await prisma.recipe.update({ where: { id: recipeId }, data: { canonicalTitle: 'Món Phase 7' } });
     await prisma.recipeIngredient.updateMany({ where: { recipeVersionId: versionId }, data: { quantity: 10 } });
     await prisma.recipeStep.updateMany({ where: { recipeVersionId: versionId }, data: { instruction: 'Nấu đúng snapshot.' } });
@@ -153,7 +153,7 @@ describe('Phase 7 snapshots and resumable sessions (database integration)', () =
     const before = await prisma.personalizedRecipeVersion.count({ where: { userId: user.id } });
     await cooking.start(user.id, { recipeSlug: slug, personalizedRecipeVersionId: first.data.id, servings: 6 });
     expect(await prisma.personalizedRecipeVersion.count({ where: { userId: user.id } })).toBe(before);
-    expect(first.data.algorithmVersion).toBe('personalize-v2');
+    expect(first.data.algorithmVersion).toBe('personalize-v3');
 
     await prisma.recipe.update({ where: { id: recipeId }, data: { canonicalTitle: 'Món Phase 7 đổi tên' } });
     const renamed = await personalization.createVersion(user.id, slug);

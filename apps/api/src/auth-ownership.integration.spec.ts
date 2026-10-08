@@ -133,6 +133,9 @@ describe('authentication, ownership, and origin boundaries (HTTP integration)', 
     });
     const profileIds = profiles.map(({ id }) => id);
 
+    await prisma.userRecipePreference.deleteMany({ where: { userId: { in: cleanupUserIds } } });
+    await prisma.personalizedAdjustmentDecision.deleteMany({ where: { userId: { in: cleanupUserIds } } });
+    await prisma.tasteControlEvent.deleteMany({ where: { tasteProfileId: { in: profileIds } } });
     await prisma.authSession.deleteMany({
       where: {
         user: { authSubject: 'dev-local-user' },
@@ -343,7 +346,7 @@ describe('authentication, ownership, and origin boundaries (HTTP integration)', 
     expect((await request(`/cook-sessions/${sessionId}/feedback`, {
       method: 'POST',
       cookie: userA.cookie,
-      body: JSON.stringify({ dimensions: { saltiness: 0 } }),
+      body: JSON.stringify({ dimensions: { saltiness: 0 }, privateNote: 'owner-only-phase8' }),
     })).status).toBe(201);
     expect((await request(`/cook-sessions/${sessionId}`, { cookie: userA.cookie })).status).toBe(200);
 
@@ -353,6 +356,11 @@ describe('authentication, ownership, and origin boundaries (HTTP integration)', 
     });
     expect(personalized.status).toBe(201);
     const personalizedId = (await json(personalized)).data?.id as string;
+    expect((await request(`/me/recipes/${slug}/personalized-versions/best`, {
+      method: 'PUT',
+      cookie: userB.cookie,
+      body: JSON.stringify({ personalizedRecipeVersionId: personalizedId }),
+    })).status).toBe(404);
     expect((await request(`/me/recipes/${slug}/personalized-versions/latest`, {
       cookie: userB.cookie,
     })).status).toBe(404);
@@ -366,6 +374,28 @@ describe('authentication, ownership, and origin boundaries (HTTP integration)', 
     expect(userBTaste.status).toBe(200);
     expect((await json(userBTaste)).data).toMatchObject({ userId: userB.userId });
     expect((await request('/me/taste-profile', { cookie: userA.cookie })).status).toBe(200);
+    expect((await request('/me/taste-profile/history')).status).toBe(401);
+    expect((await request('/me/taste-profile/dimensions/saltiness/override', {
+      method: 'PATCH',
+      cookie: userA.cookie,
+      body: JSON.stringify({ value: 0 }),
+    })).status).toBe(200);
+    const ownerHistory = await request('/me/taste-profile/history?limit=10', { cookie: userA.cookie });
+    expect(ownerHistory.status).toBe(200);
+    expect(JSON.stringify(await json(ownerHistory))).toContain('owner-only-phase8');
+    const foreignHistory = await request('/me/taste-profile/history?limit=10', { cookie: userB.cookie });
+    expect(foreignHistory.status).toBe(200);
+    expect(JSON.stringify(await json(foreignHistory))).not.toContain('owner-only-phase8');
+    expect((await request('/me/taste-profile/dimensions/saltiness/override', {
+      method: 'PATCH',
+      cookie: userA.cookie,
+      body: JSON.stringify({ value: 2 }),
+    })).status).toBe(400);
+    expect((await request('/me/taste-profile/dimensions/saltiness/reset', {
+      method: 'POST',
+      cookie: userA.cookie,
+      body: JSON.stringify({ confirm: false }),
+    })).status).toBe(400);
     expect((await request(`/users/${userA.userId}/taste-profile`, { cookie: userB.cookie })).status).toBe(404);
     expect((await request(`/users/${userA.userId}/recipes/${slug}/personalized-versions/latest`, {
       cookie: userB.cookie,

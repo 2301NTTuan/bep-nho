@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { replayTasteSignals } from '@bep-nho/domain';
 import { config } from 'dotenv';
 import { CookSessionsService } from './cook-sessions/cook-sessions.service';
 import { PrismaService } from './database/prisma.service';
@@ -132,15 +132,46 @@ describe('Phase 8 learning controls and version decisions (database integration)
     expect(generated.data.originType).toBe('taste_engine');
     expect(snapshot.ingredients[0].quantity).toBe(12.5);
 
+    await feedback.updateOverride(user.id, 'saltiness', null);
+    const manual = await feedback.updateOverride(user.id, 'saltiness', -0.5);
+    expect(manual.data.dimensions.find(({ key }) => key === 'saltiness')).toMatchObject({
+      manualOverride: -0.5,
+      effectiveScore: -0.5,
+      effectiveConfidence: 1,
+    });
+    const personalizedSession = await cooking.start(user.id, {
+      recipeSlug: slug,
+      personalizedRecipeVersionId: generated.data.id,
+    });
+    await cooking.complete(user.id, personalizedSession.data.id);
+    await feedback.submit(user.id, personalizedSession.data.id, {
+      dimensions: { saltiness: 1 },
+      privateNote: 'Exact personalized provenance',
+    });
+    const learnedBeneath = await feedback.getTasteProfile(user.id);
+    expect(learnedBeneath.data.dimensions.find(({ key }) => key === 'saltiness')).toMatchObject({
+      score: 1,
+      confidence: 0.2,
+      manualOverride: -0.5,
+      effectiveScore: -0.5,
+    });
+    const exactHistory = await feedback.history(user.id, { limit: 10, dimension: 'saltiness' });
+    expect(exactHistory.data.some((event) => event.kind === 'signal'
+      && event.signal.canonicalRecipeVersionId === versionId
+      && event.signal.personalizedRecipeVersionId === generated.data.id
+      && event.signal.personalizedRecipeVersionNo === generated.data.versionNo)).toBe(true);
+
     const cleared = await feedback.updateOverride(user.id, 'saltiness', null);
     expect(cleared.data.dimensions.find(({ key }) => key === 'saltiness')).toMatchObject({
       manualOverride: null,
-      effectiveConfidence: 0,
+      score: 1,
+      effectiveScore: 1,
+      effectiveConfidence: 0.2,
     });
     expect(await prisma.tasteControlEvent.findMany({
       where: { tasteProfile: { userId: user.id }, dimensionKey: 'saltiness' },
       orderBy: { createdAt: 'asc' },
-    })).toHaveLength(3);
+    })).toHaveLength(5);
   });
 
   it('resets one dimension without deleting evidence and deterministically replays later valid signals', async () => {
@@ -179,6 +210,34 @@ describe('Phase 8 learning controls and version decisions (database integration)
       && event.signal.privateNote === 'Ghi chú riêng Phase 8')).toBe(true);
     expect(full.data.some((event) => event.kind === 'signal'
       && event.signal.qualityFactor === 0 && event.signal.excludedReason)).toBe(true);
+
+    const concurrentSession = await cooking.start(user.id, { recipeSlug: slug });
+    await cooking.complete(user.id, concurrentSession.data.id);
+    await Promise.all([
+      feedback.submit(user.id, concurrentSession.data.id, { dimensions: { sweetness: -1 } }),
+      feedback.resetDimension(user.id, 'sweetness'),
+    ]);
+    const latestReset = await prisma.tasteControlEvent.findFirstOrThrow({
+      where: { tasteProfileId: profile.id, dimensionKey: 'sweetness', action: 'learning_reset' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+    const postResetSignals = await prisma.tasteSignal.findMany({
+      where: {
+        tasteProfileId: profile.id,
+        dimensionKey: 'sweetness',
+        createdAt: { gt: latestReset.createdAt },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    const deterministic = replayTasteSignals(postResetSignals.map((signal) => ({
+      signalValue: Number(signal.signalValue),
+      baseWeight: Number(signal.baseWeight),
+      qualityFactor: Number(signal.qualityFactor),
+      excludedReason: signal.excludedReason,
+    })));
+    const stored = (await feedback.getTasteProfile(user.id)).data.dimensions
+      .find(({ key }) => key === 'sweetness');
+    expect(stored).toMatchObject(deterministic);
   });
 
   it('records append-only decisions, reuses effective content, preserves provenance, and pins an exact best version', async () => {
@@ -242,7 +301,15 @@ describe('Phase 8 learning controls and version decisions (database integration)
     const sourceAfter = await prisma.personalizedRecipeVersion.findUniqueOrThrow({ where: { id: source.data.id } });
     expect(sourceAfter.snapshotJson).toEqual(sourceBefore.snapshotJson);
     await personalization.pinBest(user.id, slug, rejected.data.resultVersion!.id);
+    expect((await personalization.overview(user.id, slug)).data.bestVersion?.id)
+      .toBe(rejected.data.resultVersion?.id);
+    await personalization.pinBest(user.id, slug, edited.data.resultVersion!.id);
+    expect((await personalization.overview(user.id, slug)).data.bestVersion?.id)
+      .toBe(edited.data.resultVersion?.id);
+    await personalization.pinBest(user.id, slug, rejected.data.resultVersion!.id);
     await expect(personalization.pinBest(foreign.user.id, slug, rejected.data.resultVersion!.id))
+      .rejects.toBeInstanceOf(NotFoundException);
+    await expect(personalization.pinBest(user.id, 'wrong-recipe-slug', rejected.data.resultVersion!.id))
       .rejects.toBeInstanceOf(NotFoundException);
 
     await prisma.tasteDimension.update({
@@ -262,8 +329,11 @@ describe('Phase 8 learning controls and version decisions (database integration)
     const cooked = await cooking.start(user.id, {
       recipeSlug: slug,
       personalizedRecipeVersionId: overview.data.bestVersion!.id,
+      servings: 4,
     });
     expect(cooked.data.snapshot.personalizedVersion?.id).toBe(overview.data.bestVersion?.id);
+    expect(cooked.data.snapshot.servings).toBe(4);
+    expect(cooked.data.snapshot.ingredients[0].quantity).toBe(20);
     await personalization.unpinBest(user.id, slug);
     expect((await personalization.overview(user.id, slug)).data.bestVersion).toBeNull();
   });

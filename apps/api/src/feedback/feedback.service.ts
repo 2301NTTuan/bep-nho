@@ -411,7 +411,10 @@ export class FeedbackService {
           cookFeedback: {
             include: {
               cookSession: {
-                include: { recipeVersion: { include: { recipe: true } } },
+                include: {
+                  recipeVersion: { include: { recipe: true } },
+                  personalizedRecipeVersion: true,
+                },
               },
             },
           },
@@ -438,7 +441,14 @@ export class FeedbackService {
           cookFeedbackId: signal.cookFeedbackId,
           cookSessionId: signal.cookFeedback?.cookSessionId ?? null,
           recipeSlug: signal.cookFeedback?.cookSession.recipeVersion.recipe.slug ?? null,
+          recipeTitle: signal.cookFeedback?.cookSession.recipeVersion.recipe.canonicalTitle ?? null,
+          canonicalRecipeVersionId: signal.cookFeedback?.cookSession.recipeVersionId ?? null,
+          canonicalRecipeVersionNo: signal.cookFeedback?.cookSession.recipeVersion.versionNo ?? null,
           personalizedRecipeVersionId: signal.cookFeedback?.cookSession.personalizedRecipeVersionId ?? null,
+          personalizedRecipeVersionNo:
+            signal.cookFeedback?.cookSession.personalizedRecipeVersion?.versionNo ?? null,
+          personalizationAlgorithm:
+            signal.cookFeedback?.cookSession.personalizedRecipeVersion?.algorithmVersion ?? null,
           overallScore: signal.cookFeedback?.overallScore === null || !signal.cookFeedback
             ? null : Number(signal.cookFeedback.overallScore),
           dimensions: signal.cookFeedback?.dimensionJson ?? null,

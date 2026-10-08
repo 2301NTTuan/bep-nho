@@ -69,6 +69,11 @@ export type PersonalizationOverview = {
   bestVersion: PersonalizedVersion | null;
 };
 export type PersonalizationOverviewResponse = ApiEnvelope<PersonalizationOverview>;
+export type MyBestVersionPreference = {
+  recipeId: string;
+  bestPersonalizedRecipeVersionId: string | null;
+  bestVersion: PersonalizedVersion | null;
+};
 export const PERSONALIZED_ADJUSTMENT_ACTIONS = ['ACCEPT', 'REJECT', 'EDIT'] as const;
 export type PersonalizedAdjustmentAction = (typeof PERSONALIZED_ADJUSTMENT_ACTIONS)[number];
 export type PersonalizedAdjustmentDecision = {
@@ -155,16 +160,22 @@ export type TasteProfile = {
   sampleCount: number; computedAt: string; dimensions: TasteDimensionResponse[];
 };
 export type TasteProfileResponse = ApiEnvelope<TasteProfile>;
+export const TASTE_CONTROL_ACTIONS = [
+  'manual_override_set', 'manual_override_cleared', 'learning_reset',
+] as const;
+export type TasteControlAction = (typeof TASTE_CONTROL_ACTIONS)[number];
 export type TasteHistoryEvent = {
   id: string; kind: 'signal' | 'control'; dimensionKey: string; createdAt: string;
   signal?: {
     value: number; sourceType: string; baseWeight: number; qualityFactor: number;
     excludedReason: string | null; cookFeedbackId: string | null;
-    cookSessionId: string | null; recipeSlug: string | null;
-    personalizedRecipeVersionId: string | null; overallScore: number | null;
+    cookSessionId: string | null; recipeSlug: string | null; recipeTitle: string | null;
+    canonicalRecipeVersionId: string | null; canonicalRecipeVersionNo: number | null;
+    personalizedRecipeVersionId: string | null; personalizedRecipeVersionNo: number | null;
+    personalizationAlgorithm: string | null; overallScore: number | null;
     dimensions: unknown; technicalFlags: unknown; privateNote: string | null;
   };
-  control?: { action: 'manual_override_set' | 'manual_override_cleared' | 'learning_reset'; value: number | null };
+  control?: { action: TasteControlAction; value: number | null };
 };
 export type TasteHistoryResponse = ApiEnvelope<TasteHistoryEvent[]> & {
   meta: ApiMeta & { count: number; nextCursor: string | null };

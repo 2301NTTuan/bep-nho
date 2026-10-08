@@ -21,14 +21,14 @@ The web experience now presents this loop coherently on desktop and mobile. It i
 - The internal alpha now has 13 structured Vietnamese home recipes, but they remain explicitly experimental and still need human culinary/editorial review plus production media/workflow.
 - Serving selection supports deterministic ingredient-aware scaling for 1–8 portions, with conservative/fixed modes and practical rounding. Broader culinary calibration still needs editorial testing.
 - Cook Mode now resumes from an immutable server snapshot, persists real timer/progress events, and queues progress briefly offline. Browser E2E, timer pause, multi-device conflict UX, and offline feedback/completion remain open.
-- Users see generated adjustments but cannot explicitly accept, reject, edit, or pin “My Best Version” before future use.
-- Taste DNA has no dedicated history/control screen for explanations, overrides, or reset.
+- Users can now explicitly accept, reject, or bounded-edit adjusted ingredients, and can pin one immutable “My Best Version” per recipe. Broader version-library comparison and bulk review remain future UX work.
+- Taste DNA now has a private history/control screen with deterministic explanations, manual overrides, and per-dimension reset. Cross-device live refresh and export are not included.
 - The web now has real login/register/logout flows and keeps public recipe browsing available while signed out. Deployment still needs verified same-site cookie/origin configuration and abuse controls.
 
 ## Architectural debt and operational gaps
 
 - API contracts are shared TypeScript definitions, not generated from an OpenAPI source of truth.
-- Scaling, cook progress, timer restoration, sequencing, and queue reconciliation now live as pure domain utilities. Taste-learning rules still live mainly in NestJS services and should be extracted before they grow.
+- Scaling, cook progress, timer restoration, sequencing, queue reconciliation, Taste replay, and effective override semantics now have pure domain utilities. HTTP orchestration and deterministic explanation copy remain in NestJS services.
 - User-owned APIs now have session guards, 404 ownership semantics, Origin checks, and focused security tests. Retry idempotency beyond the hardened cooking paths, login throttling/rate limits, and broader audit controls remain open.
 - The integration suite covers concurrency, provenance, and the domain loop; focused HTTP tests cover standardized conflicts and development-route isolation. Browser accessibility/responsive automation is still missing.
 - There is no production observability baseline (structured logs, metrics, traces, error reporting) or CI workflow enforcing all gates.
@@ -46,7 +46,7 @@ Completed 2026-10-08: 13 explicitly experimental Vietnamese home recipes, immuta
 
 ### Phase 8 — User control over learning
 
-Add Taste DNA history/explanation, adjustment accept/reject/edit, manual overrides/reset, and “My Best Version.” Preserve raw signals and deterministic replay.
+Completed 2026-10-08: private Taste DNA history/explanations, append-only manual override/reset controls, deterministic post-reset replay, bounded adjustment accept/reject/edit decisions, explicit engine/user version provenance, and stable “My Best Version” pinning.
 
 ### Phase 9 — Delivery quality and operations
 
@@ -80,3 +80,13 @@ Do not begin social, pantry, household, or monetization domains before Phases 6�
 - Timer and step progress derive from persisted/queued timestamped events. Sequence numbers use the maximum of server and local state.
 - IndexedDB retains failed progress events, acknowledges idempotent duplicates, prevents cross-user replay, contains no credentials, and is cleared for the logging-out user.
 - Feedback begins only after server-confirmed completion. Phase 5.5 integrity and Phase 6 auth/Origin/404 ownership behavior remain covered.
+
+## Phase 8 user control completed
+
+- `/taste` exposes every supported dimension with learned score, confidence, effective weight/sample count, manual override, effective values, deterministic explanation, and owner-only signal/control history.
+- Override `0` is distinct from no override. Any manual override is authoritative at confidence 1 while recipe-rule min/max bounds remain enforced. Clearing and resetting are append-only control events.
+- Reset affects only one learned dimension, preserves raw TasteSignal/CookFeedback history and profile/global counters, and uses the same TasteProfile advisory lock as feedback. Subsequent state is replayed only from valid signals after the latest reset.
+- Personalized suggestions now use `personalize-v3`, because zero-confidence override semantics materially change effective output. Prior immutable versions remain valid and retain their stored algorithm version.
+- ACCEPT records a decision without minting content; REJECT and bounded EDIT create or reuse immutable effective-content snapshots. Source versions never change, and user-derived versions retain canonical/taste provenance plus explicit parent/origin metadata.
+- Latest engine suggestion, latest version of any origin, and “My Best Version” are separate concepts. Pin/unpin never creates a version, a later suggestion never moves the pin, and CookSession stores the exact selected version snapshot.
+- Current-user guards, exact-Origin mutation protection, foreign-object 404 behavior, append-only decision/control logs, concurrency locks, and effective-content hash reuse are covered by PostgreSQL and HTTP regressions.

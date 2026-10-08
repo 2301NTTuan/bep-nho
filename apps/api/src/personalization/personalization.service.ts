@@ -3,6 +3,7 @@ import {
 } from 'node:crypto';
 
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -10,13 +11,17 @@ import {
 import {
   Prisma,
 } from '@prisma/client';
+import type {
+  PersonalizedAdjustmentAction,
+  PersonalizedSnapshot,
+} from '@bep-nho/contracts';
 
 import {
   PrismaService,
 } from '../database/prisma.service';
 
 const ENGINE_VERSION =
-  'personalize-v2';
+  'personalize-v3';
 
 const TASTE_VERSION =
   'taste-v1';
@@ -63,6 +68,60 @@ export class PersonalizationService {
         JSON.stringify(value),
       )
       .digest('hex');
+  }
+
+  private effectiveContent(
+    snapshot: PersonalizedSnapshot,
+    algorithmVersion: string,
+  ) {
+    return {
+      algorithmVersion,
+      recipe: snapshot.recipe,
+      baseVersion: snapshot.baseVersion,
+      servings: snapshot.servings,
+      prepTimeMinutes: snapshot.prepTimeMinutes,
+      cookTimeMinutes: snapshot.cookTimeMinutes,
+      summary: snapshot.summary,
+      ingredients: snapshot.ingredients.map((ingredient) => ({
+        slug: ingredient.slug,
+        quantity: ingredient.quantity,
+        personalizationFactor: ingredient.personalizationFactor,
+        unit: ingredient.unit,
+        preparation: ingredient.preparation,
+        note: ingredient.note,
+        sortOrder: ingredient.sortOrder,
+        scalingMode: ingredient.scalingMode,
+        scalingExponent: ingredient.scalingExponent,
+        roundingIncrement: ingredient.roundingIncrement,
+      })),
+      steps: snapshot.steps.map((step) => ({
+        stepNo: step.stepNo,
+        instruction: step.instruction,
+        durationSeconds: step.durationSeconds,
+        heatLevel: step.heatLevel,
+        tip: step.tip,
+      })),
+    };
+  }
+
+  private serializeVersion(version: {
+    id: string;
+    versionNo: number;
+    algorithmVersion: string;
+    originType: string;
+    parentPersonalizedRecipeVersionId: string | null;
+    createdAt: Date;
+    snapshotJson: Prisma.JsonValue;
+  }) {
+    return {
+      id: version.id,
+      versionNo: version.versionNo,
+      algorithmVersion: version.algorithmVersion,
+      originType: version.originType,
+      parentPersonalizedRecipeVersionId: version.parentPersonalizedRecipeVersionId,
+      createdAt: version.createdAt,
+      snapshot: version.snapshotJson,
+    };
   }
 
   async createVersion(
@@ -260,12 +319,12 @@ export class PersonalizationService {
             }
 
             const confidence =
-              Number(
-                dimension
-                  .confidence,
-              );
+              dimension.manualOverride === null
+                ? Number(dimension.confidence)
+                : 1;
 
             if (
+              dimension.manualOverride === null &&
               confidence <
               MIN_CONFIDENCE
             ) {
@@ -548,46 +607,12 @@ export class PersonalizationService {
       },
     };
 
-    const hashInput = {
-      algorithmVersion: ENGINE_VERSION,
-      recipe: {
-        id: recipe.id,
-        slug: recipe.slug,
-        title: recipe.canonicalTitle,
-        cuisine: recipe.cuisine,
-      },
-      baseVersion: {
-        id: base.id,
-        versionNo: base.versionNo,
-      },
-      servings: snapshot.servings,
-      prepTimeMinutes: snapshot.prepTimeMinutes,
-      cookTimeMinutes: snapshot.cookTimeMinutes,
-      summary: snapshot.summary,
-      ingredients: ingredients.map((ingredient) => ({
-        slug: ingredient.slug,
-        quantity: ingredient.quantity,
-        personalizationFactor: ingredient.personalizationFactor,
-        unit: ingredient.unit,
-        preparation: ingredient.preparation,
-        note: ingredient.note,
-        sortOrder: ingredient.sortOrder,
-        scalingMode: ingredient.scalingMode,
-        scalingExponent: ingredient.scalingExponent,
-        roundingIncrement: ingredient.roundingIncrement,
-      })),
-      steps: snapshot.steps.map((step) => ({
-        stepNo: step.stepNo,
-        instruction: step.instruction,
-        durationSeconds: step.durationSeconds,
-        heatLevel: step.heatLevel,
-        tip: step.tip,
-      })),
-    };
-
     const contentHash =
       this.hash(
-        hashInput,
+        this.effectiveContent(
+          snapshot as unknown as PersonalizedSnapshot,
+          ENGINE_VERSION,
+        ),
       );
 
     const persisted = await this.prisma.$transaction(async (tx) => {
@@ -629,6 +654,7 @@ export class PersonalizationService {
           tasteProfileId: tasteProfile.id,
           versionNo: nextVersion,
           algorithmVersion: ENGINE_VERSION,
+          originType: 'taste_engine',
           contentHash,
           adjustmentJson: adjustments as Prisma.InputJsonValue,
           snapshotJson: snapshot as Prisma.InputJsonValue,
@@ -640,28 +666,7 @@ export class PersonalizationService {
 
     const created = persisted.version;
 
-    return {
-      data: {
-        id:
-          created.id,
-
-        versionNo:
-          created.versionNo,
-
-        algorithmVersion:
-          created
-            .algorithmVersion,
-
-        createdAt:
-          created.createdAt,
-
-        reused:
-          persisted.reused,
-
-        snapshot:
-          created.snapshotJson,
-      },
-    };
+    return { data: { ...this.serializeVersion(created), reused: persisted.reused } };
   }
 
   async latest(
@@ -705,23 +710,216 @@ export class PersonalizationService {
       );
     }
 
+    return { data: this.serializeVersion(version) };
+  }
+
+  async overview(userId: string, slug: string) {
+    const recipe = await this.prisma.recipe.findUnique({ where: { slug } });
+    if (!recipe) throw new NotFoundException(`Recipe '${slug}' was not found`);
+    const [latestEngine, latestAny, preference] = await Promise.all([
+      this.prisma.personalizedRecipeVersion.findFirst({
+        where: { userId, recipeId: recipe.id, originType: 'taste_engine' },
+        orderBy: { versionNo: 'desc' },
+      }),
+      this.prisma.personalizedRecipeVersion.findFirst({
+        where: { userId, recipeId: recipe.id },
+        orderBy: { versionNo: 'desc' },
+      }),
+      this.prisma.userRecipePreference.findUnique({
+        where: { userId_recipeId: { userId, recipeId: recipe.id } },
+        include: { bestVersion: true },
+      }),
+    ]);
     return {
       data: {
-        id:
-          version.id,
+        latestEngine: latestEngine ? this.serializeVersion(latestEngine) : null,
+        latestAny: latestAny ? this.serializeVersion(latestAny) : null,
+        bestVersion: preference?.bestVersion ? this.serializeVersion(preference.bestVersion) : null,
+      },
+    };
+  }
 
-        versionNo:
-          version.versionNo,
+  async pinBest(userId: string, slug: string, versionId: string) {
+    const version = await this.prisma.personalizedRecipeVersion.findFirst({
+      where: { id: versionId, userId, recipe: { slug } },
+      include: { recipe: true },
+    });
+    if (!version) throw new NotFoundException('Personalized recipe version was not found');
+    await this.prisma.userRecipePreference.upsert({
+      where: { userId_recipeId: { userId, recipeId: version.recipeId } },
+      update: { bestPersonalizedRecipeVersionId: version.id },
+      create: {
+        userId,
+        recipeId: version.recipeId,
+        bestPersonalizedRecipeVersionId: version.id,
+      },
+    });
+    return { data: this.serializeVersion(version) };
+  }
 
-        algorithmVersion:
-          version
-            .algorithmVersion,
+  async unpinBest(userId: string, slug: string) {
+    const recipe = await this.prisma.recipe.findUnique({ where: { slug }, select: { id: true } });
+    if (!recipe) throw new NotFoundException(`Recipe '${slug}' was not found`);
+    await this.prisma.userRecipePreference.upsert({
+      where: { userId_recipeId: { userId, recipeId: recipe.id } },
+      update: { bestPersonalizedRecipeVersionId: null },
+      create: { userId, recipeId: recipe.id, bestPersonalizedRecipeVersionId: null },
+    });
+    return { data: { bestVersion: null } };
+  }
 
-        createdAt:
-          version.createdAt,
+  async decisions(userId: string, slug: string, sourceVersionId: string) {
+    const source = await this.prisma.personalizedRecipeVersion.findFirst({
+      where: { id: sourceVersionId, userId, recipe: { slug } },
+      select: { id: true },
+    });
+    if (!source) throw new NotFoundException('Personalized recipe version was not found');
+    const decisions = await this.prisma.personalizedAdjustmentDecision.findMany({
+      where: { userId, sourcePersonalizedRecipeVersionId: source.id },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      include: { ingredient: true, resultVersion: true },
+    });
+    return {
+      data: decisions.map((decision) => ({
+        id: decision.id,
+        action: decision.action,
+        ingredientId: decision.ingredientId,
+        ingredientSlug: decision.ingredient.slug,
+        sourcePersonalizedRecipeVersionId: decision.sourcePersonalizedRecipeVersionId,
+        resultPersonalizedRecipeVersionId: decision.resultPersonalizedRecipeVersionId,
+        editedQuantity: decision.editedQuantity === null ? null : Number(decision.editedQuantity),
+        createdAt: decision.createdAt,
+        resultVersion: decision.resultVersion ? this.serializeVersion(decision.resultVersion) : null,
+      })),
+    };
+  }
 
-        snapshot:
-          version.snapshotJson,
+  async decide(
+    userId: string,
+    slug: string,
+    sourceVersionId: string,
+    ingredientSlug: string,
+    action: PersonalizedAdjustmentAction,
+    editedQuantity?: number,
+  ) {
+    const source = await this.prisma.personalizedRecipeVersion.findFirst({
+      where: { id: sourceVersionId, userId, recipe: { slug } },
+      include: { recipe: true },
+    });
+    if (!source) throw new NotFoundException('Personalized recipe version was not found');
+    const snapshot = structuredClone(source.snapshotJson) as unknown as PersonalizedSnapshot;
+    const ingredient = snapshot.ingredients.find((item) => item.slug === ingredientSlug);
+    const adjusted = snapshot.adjustments.some((item) => item.ingredientSlug === ingredientSlug);
+    if (!ingredient || !adjusted) {
+      throw new BadRequestException('Only adjusted ingredients can be reviewed');
+    }
+
+    const rules = await this.prisma.recipeAdjustmentRule.findMany({
+      where: { recipeVersionId: source.baseRecipeVersionId, ingredientId: ingredient.id },
+      orderBy: { dimensionKey: 'asc' },
+    });
+    if (rules.length === 0) throw new BadRequestException('Adjustment rules were not found');
+    const minFactor = rules.reduce((value, rule) => value * Number(rule.minFactor), 1);
+    const maxFactor = rules.reduce((value, rule) => value * Number(rule.maxFactor), 1);
+    const baseQuantity = ingredient.baseQuantity;
+    let quantity = ingredient.quantity;
+
+    if (action === 'EDIT') {
+      if (editedQuantity === undefined || !Number.isFinite(editedQuantity) || editedQuantity <= 0) {
+        throw new BadRequestException('A positive edited quantity is required');
+      }
+      const factor = editedQuantity / baseQuantity;
+      if (factor < minFactor - 0.000001 || factor > maxFactor + 0.000001) {
+        throw new BadRequestException(
+          `Edited quantity must stay between ${roundQuantity(baseQuantity * minFactor)} and ${roundQuantity(baseQuantity * maxFactor)} ${ingredient.unit}`,
+        );
+      }
+      quantity = roundQuantity(editedQuantity);
+    } else if (action === 'REJECT') {
+      quantity = baseQuantity;
+    }
+
+    const persisted = await this.prisma.$transaction(async (tx) => {
+      const lockKey = `${userId}:${source.recipeId}`;
+      await tx.$queryRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtextextended(${lockKey}, 0)
+        ) IS NULL AS locked
+      `;
+
+      let resultVersion = null;
+      if (action !== 'ACCEPT') {
+        const nextSnapshot = structuredClone(snapshot);
+        const nextIngredient = nextSnapshot.ingredients.find((item) => item.slug === ingredientSlug);
+        if (!nextIngredient) throw new BadRequestException('Adjusted ingredient was not found');
+        const factor = baseQuantity === 0 ? 1 : quantity / baseQuantity;
+        nextIngredient.quantity = quantity;
+        nextIngredient.personalizationFactor = factor;
+        nextIngredient.personalized = Math.abs(factor - 1) > 0.000001;
+        nextIngredient.deltaPercent = baseQuantity === 0
+          ? 0
+          : Math.round(((quantity - baseQuantity) / baseQuantity) * 10000) / 100;
+        nextSnapshot.adjustments = action === 'REJECT'
+          ? nextSnapshot.adjustments.filter((item) => item.ingredientSlug !== ingredientSlug)
+          : nextSnapshot.adjustments.map((item) => item.ingredientSlug === ingredientSlug
+            ? { ...item, quantity, deltaPercent: nextIngredient.deltaPercent }
+            : item);
+
+        const contentHash = this.hash(this.effectiveContent(nextSnapshot, source.algorithmVersion));
+        resultVersion = await tx.personalizedRecipeVersion.findUnique({
+          where: {
+            userId_recipeId_contentHash: { userId, recipeId: source.recipeId, contentHash },
+          },
+        });
+        if (!resultVersion) {
+          const aggregate = await tx.personalizedRecipeVersion.aggregate({
+            where: { userId, recipeId: source.recipeId },
+            _max: { versionNo: true },
+          });
+          resultVersion = await tx.personalizedRecipeVersion.create({
+            data: {
+              userId,
+              recipeId: source.recipeId,
+              baseRecipeVersionId: source.baseRecipeVersionId,
+              tasteProfileId: source.tasteProfileId,
+              versionNo: Math.max(source.versionNo + 1, (aggregate._max.versionNo ?? source.versionNo) + 1),
+              algorithmVersion: source.algorithmVersion,
+              originType: 'user_edit',
+              parentPersonalizedRecipeVersionId: source.id,
+              contentHash,
+              adjustmentJson: nextSnapshot.adjustments as Prisma.InputJsonValue,
+              snapshotJson: nextSnapshot as unknown as Prisma.InputJsonValue,
+            },
+          });
+        }
+      }
+
+      const decision = await tx.personalizedAdjustmentDecision.create({
+        data: {
+          userId,
+          recipeId: source.recipeId,
+          sourcePersonalizedRecipeVersionId: source.id,
+          resultPersonalizedRecipeVersionId: resultVersion?.id ?? null,
+          ingredientId: ingredient.id,
+          action,
+          editedQuantity: action === 'EDIT' ? quantity : null,
+        },
+      });
+      return { decision, resultVersion };
+    });
+
+    return {
+      data: {
+        id: persisted.decision.id,
+        action: persisted.decision.action,
+        ingredientId: persisted.decision.ingredientId,
+        ingredientSlug,
+        sourcePersonalizedRecipeVersionId: persisted.decision.sourcePersonalizedRecipeVersionId,
+        resultPersonalizedRecipeVersionId: persisted.decision.resultPersonalizedRecipeVersionId,
+        editedQuantity: persisted.decision.editedQuantity === null
+          ? null : Number(persisted.decision.editedQuantity),
+        createdAt: persisted.decision.createdAt,
+        resultVersion: persisted.resultVersion ? this.serializeVersion(persisted.resultVersion) : null,
       },
     };
   }

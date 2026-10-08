@@ -1,6 +1,41 @@
 export type TasteDimensionKey = 'saltiness'|'sweetness'|'sourness'|'spiciness'|'umami'|'fat_richness'|'bitterness'|'softness'|'dryness_sauce'|'garlic_onion'|'herbal_aroma';
-export type TasteDimensionState = { score:number; confidence:number; effectiveWeight:number; sampleCount:number; manualOverride?:number };
+export type TasteDimensionState = { score:number; confidence:number; effectiveWeight:number; sampleCount:number; manualOverride?:number | null };
 export const clampTaste=(v:number)=>Math.max(-1,Math.min(1,v));
+
+export type ReplayableTasteSignal = {
+  signalValue: number;
+  baseWeight: number;
+  qualityFactor: number;
+  excludedReason?: string | null;
+};
+
+export function replayTasteSignals(signals: ReplayableTasteSignal[]): TasteDimensionState {
+  let weightedTotal = 0;
+  let effectiveWeight = 0;
+  let sampleCount = 0;
+
+  for (const signal of signals) {
+    if (signal.excludedReason || signal.qualityFactor <= 0) continue;
+    const weight = signal.baseWeight * signal.qualityFactor;
+    if (!Number.isFinite(weight) || weight <= 0) continue;
+    weightedTotal += clampTaste(signal.signalValue) * weight;
+    effectiveWeight += weight;
+    sampleCount += 1;
+  }
+
+  return {
+    score: effectiveWeight === 0 ? 0 : clampTaste(weightedTotal / effectiveWeight),
+    confidence: Math.min(1, sampleCount / 5),
+    effectiveWeight,
+    sampleCount,
+  };
+}
+
+export function effectiveTasteState(state: TasteDimensionState): { score: number; confidence: number } {
+  return state.manualOverride === null || state.manualOverride === undefined
+    ? { score: state.score, confidence: state.confidence }
+    : { score: clampTaste(state.manualOverride), confidence: 1 };
+}
 
 export type RecipeStatus = 'draft' | 'published' | 'archived';
 export type ScalingMode = 'LINEAR' | 'CONSERVATIVE' | 'FIXED';

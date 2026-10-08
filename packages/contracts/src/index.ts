@@ -59,9 +59,25 @@ export type PersonalizedSnapshot = {
 };
 export type PersonalizedVersion = {
   id: string; versionNo: number; algorithmVersion: string; createdAt: string;
+  originType: 'taste_engine' | 'user_edit'; parentPersonalizedRecipeVersionId: string | null;
   reused?: boolean; snapshot: PersonalizedSnapshot;
 };
 export type PersonalizedResponse = ApiEnvelope<PersonalizedVersion>;
+export type PersonalizationOverview = {
+  latestEngine: PersonalizedVersion | null;
+  latestAny: PersonalizedVersion | null;
+  bestVersion: PersonalizedVersion | null;
+};
+export type PersonalizationOverviewResponse = ApiEnvelope<PersonalizationOverview>;
+export const PERSONALIZED_ADJUSTMENT_ACTIONS = ['ACCEPT', 'REJECT', 'EDIT'] as const;
+export type PersonalizedAdjustmentAction = (typeof PERSONALIZED_ADJUSTMENT_ACTIONS)[number];
+export type PersonalizedAdjustmentDecision = {
+  id: string; action: PersonalizedAdjustmentAction; ingredientId: string;
+  ingredientSlug: string; sourcePersonalizedRecipeVersionId: string;
+  resultPersonalizedRecipeVersionId: string | null; editedQuantity: number | null;
+  createdAt: string; resultVersion: PersonalizedVersion | null;
+};
+export type PersonalizedAdjustmentDecisionResponse = ApiEnvelope<PersonalizedAdjustmentDecision>;
 
 export type CurrentUserContext = {
   environment?: string;
@@ -116,10 +132,12 @@ export type CookSession = {
 export type CookSessionResponse = ApiEnvelope<CookSession>;
 export type ActiveCookSessionResponse = CookSessionResponse;
 
-export type TasteDimensionKey =
-  | 'saltiness' | 'sweetness' | 'sourness' | 'spiciness' | 'umami'
-  | 'fat_richness' | 'bitterness' | 'softness' | 'dryness_sauce'
-  | 'garlic_onion' | 'herbal_aroma';
+export const TASTE_DIMENSION_KEYS = [
+  'saltiness', 'sweetness', 'sourness', 'spiciness', 'umami',
+  'fat_richness', 'bitterness', 'softness', 'dryness_sauce',
+  'garlic_onion', 'herbal_aroma',
+] as const;
+export type TasteDimensionKey = (typeof TASTE_DIMENSION_KEYS)[number];
 export type TasteFeedbackInput = {
   overallScore?: number;
   dimensions: Partial<Record<TasteDimensionKey, number>>;
@@ -129,4 +147,25 @@ export type TasteFeedbackInput = {
 export type TasteDimensionResponse = {
   key: string; scopeType: string; scopeId: string; score: number; confidence: number;
   effectiveWeight: number; sampleCount: number; manualOverride: number | null;
+  effectiveScore: number; effectiveConfidence: number;
+  explanation: string;
+};
+export type TasteProfile = {
+  id: string; userId: string; algorithmVersion: string; maturityScore: number;
+  sampleCount: number; computedAt: string; dimensions: TasteDimensionResponse[];
+};
+export type TasteProfileResponse = ApiEnvelope<TasteProfile>;
+export type TasteHistoryEvent = {
+  id: string; kind: 'signal' | 'control'; dimensionKey: string; createdAt: string;
+  signal?: {
+    value: number; sourceType: string; baseWeight: number; qualityFactor: number;
+    excludedReason: string | null; cookFeedbackId: string | null;
+    cookSessionId: string | null; recipeSlug: string | null;
+    personalizedRecipeVersionId: string | null; overallScore: number | null;
+    dimensions: unknown; technicalFlags: unknown; privateNote: string | null;
+  };
+  control?: { action: 'manual_override_set' | 'manual_override_cleared' | 'learning_reset'; value: number | null };
+};
+export type TasteHistoryResponse = ApiEnvelope<TasteHistoryEvent[]> & {
+  meta: ApiMeta & { count: number; nextCursor: string | null };
 };

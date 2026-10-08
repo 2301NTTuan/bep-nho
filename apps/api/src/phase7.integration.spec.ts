@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Prisma } from '@prisma/client';
 import { config } from 'dotenv';
+import { scaleIngredientQuantity } from '@bep-nho/domain';
 import { CookSessionsService } from './cook-sessions/cook-sessions.service';
 import { PrismaService } from './database/prisma.service';
 import { PersonalizationService } from './personalization/personalization.service';
@@ -34,8 +35,11 @@ describe('Phase 7 snapshots and resumable sessions (database integration)', () =
     recipeId = recipe.id;
     const version = await prisma.recipeVersion.create({ data: { recipeId, versionNo: 1, servings: 2, summary: 'Snapshot gốc', contentHash: runId, publishedAt: new Date() } });
     versionId = version.id;
-    await prisma.recipeIngredient.create({ data: { recipeVersionId: version.id, ingredientId, quantity: 10, unit: 'ml', sortOrder: 1, scalingMode: 'CONSERVATIVE', scalingExponent: 0.75, roundingIncrement: 1 } });
+    await prisma.recipeIngredient.create({ data: { recipeVersionId: version.id, ingredientId, quantity: 10, unit: 'ml', sortOrder: 1, scalingMode: 'CONSERVATIVE', scalingExponent: 0.75, roundingIncrement: null } });
     await prisma.recipeStep.create({ data: { recipeVersionId: version.id, stepNo: 1, instruction: 'Nấu đúng snapshot.', durationSeconds: 60 } });
+    await prisma.recipeAdjustmentRule.create({
+      data: { recipeVersionId: version.id, ingredientId, dimensionKey: 'saltiness', sensitivity: 0.5, minFactor: 0.75, maxFactor: 1.25 },
+    });
   });
 
   afterAll(async () => {
@@ -57,13 +61,87 @@ describe('Phase 7 snapshots and resumable sessions (database integration)', () =
   it('persists an immutable scaled snapshot and returns it after source rows change', async () => {
     const user = await createUser();
     const started = await cooking.start(user.id, { recipeSlug: slug, servings: 4 });
-    expect(started.data.snapshot.ingredients[0]).toMatchObject({ canonicalQuantity: 10, scaledQuantity: 17, quantity: 17 });
+    expect(started.data.snapshot.ingredients[0]).toMatchObject({ canonicalQuantity: 10, scaledQuantity: 17, quantity: 17, roundingIncrement: null });
     const exactSnapshot = started.data.snapshot;
 
     await prisma.recipe.update({ where: { id: recipeId }, data: { canonicalTitle: 'Tên đã đổi' } });
     await prisma.recipeIngredient.updateMany({ where: { recipeVersionId: versionId }, data: { quantity: 999 } });
     await prisma.recipeStep.updateMany({ where: { recipeVersionId: versionId }, data: { instruction: 'Bước đã đổi' } });
     expect((await cooking.get(user.id, started.data.id)).data.snapshot).toEqual(exactSnapshot);
+    await prisma.recipe.update({ where: { id: recipeId }, data: { canonicalTitle: 'Món Phase 7' } });
+    await prisma.recipeIngredient.updateMany({ where: { recipeVersionId: versionId }, data: { quantity: 10 } });
+    await prisma.recipeStep.updateMany({ where: { recipeVersionId: versionId }, data: { instruction: 'Nấu đúng snapshot.' } });
+  });
+
+  it('matches domain preview rounding for canonical and personalized snapshots with a null increment', async () => {
+    const user = await createUser();
+    const canonicalExpected = scaleIngredientQuantity({
+      quantity: 10,
+      unit: 'ml',
+      scalingMode: 'CONSERVATIVE',
+      scalingExponent: 0.75,
+      roundingIncrement: null,
+    }, 2, 4);
+    const canonical = await cooking.start(user.id, { recipeSlug: slug, servings: 4 });
+    expect(canonical.data.snapshot.ingredients[0].quantity).toBe(canonicalExpected.quantity);
+
+    const profile = await prisma.tasteProfile.findUniqueOrThrow({
+      where: { userId_algorithmVersion: { userId: user.id, algorithmVersion: 'taste-v1' } },
+    });
+    await prisma.tasteDimension.create({
+      data: {
+        tasteProfileId: profile.id,
+        dimensionKey: 'saltiness',
+        score: 0.5,
+        confidence: 0.8,
+        effectiveWeight: 2,
+        sampleCount: 2,
+      },
+    });
+    const personalized = await personalization.createVersion(user.id, slug);
+    const personalizedIngredient = (personalized.data.snapshot as { ingredients: Array<{ personalizationFactor: number }> }).ingredients[0];
+    const personalizedExpected = scaleIngredientQuantity({
+      quantity: 10,
+      unit: 'ml',
+      scalingMode: 'CONSERVATIVE',
+      scalingExponent: 0.75,
+      roundingIncrement: null,
+    }, 2, 4, personalizedIngredient.personalizationFactor);
+    const personalizedSession = await cooking.start(user.id, {
+      recipeSlug: slug,
+      personalizedRecipeVersionId: personalized.data.id,
+      servings: 4,
+    });
+    expect(personalizedSession.data.snapshot.ingredients[0]).toMatchObject({
+      quantity: personalizedExpected.quantity,
+      personalizationFactor: personalizedIngredient.personalizationFactor,
+      roundingIncrement: null,
+    });
+  });
+
+  it('keeps logical timer start and completion payloads idempotent across retries', async () => {
+    const user = await createUser();
+    const session = await cooking.start(user.id, { recipeSlug: slug });
+    const startedAt = '2026-01-01T12:00:00.000Z';
+    await cooking.addEvent(user.id, session.data.id, {
+      eventType: 'timer_started', clientSeq: 1, clientTime: startedAt,
+      payload: { stepNo: 1, durationSeconds: 600, startedAt },
+    });
+    const duplicateStart = await cooking.addEvent(user.id, session.data.id, {
+      eventType: 'timer_started', clientSeq: 1, clientTime: '2026-01-01T12:05:00.000Z',
+      payload: { stepNo: 1, durationSeconds: 600, startedAt: '2026-01-01T12:05:00.000Z' },
+    });
+    expect(duplicateStart.data.duplicate).toBe(true);
+    expect((duplicateStart.data.payload as { startedAt: string }).startedAt).toBe(startedAt);
+
+    await cooking.addEvent(user.id, session.data.id, {
+      eventType: 'timer_completed', clientSeq: 2, clientTime: '2026-01-01T12:10:00.000Z', payload: { stepNo: 1 },
+    });
+    const duplicateCompletion = await cooking.addEvent(user.id, session.data.id, {
+      eventType: 'timer_completed', clientSeq: 2, clientTime: '2026-01-01T12:10:01.000Z', payload: { stepNo: 1 },
+    });
+    expect(duplicateCompletion.data.duplicate).toBe(true);
+    expect((await cooking.get(user.id, session.data.id)).data.events.map((event) => event.clientSeq)).toEqual([0, 1, 2]);
   });
 
   it('does not mint a personalized version for serving choice and hashes title changes in personalize-v2', async () => {

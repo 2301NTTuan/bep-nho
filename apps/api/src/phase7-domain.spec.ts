@@ -42,6 +42,7 @@ describe('Phase 7 pure scaling, sequencing, timers, and queue reconciliation', (
     const result = await reconcileCookQueue(
       [make(3), make(1), make(2), { ...make(0), id: 'foreign', userId: 'user-b' }],
       'user-a',
+      'session-a',
       async (event) => { sent.push(event.clientSeq); return event.clientSeq === 1 ? 'duplicate' : event.clientSeq === 2 ? 'retry' : 'acknowledged'; },
       async (event) => { removed.push(event.clientSeq); },
     );

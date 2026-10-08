@@ -7,6 +7,7 @@ export type {
   LogoutResponse,
   PersonalizedIngredient,
   PersonalizedAdjustmentDecisionResponse,
+  PersonalizedAdjustmentDecisionsResponse,
   PersonalizationOverviewResponse,
   PersonalizedResponse,
   PersonalizedSnapshot,

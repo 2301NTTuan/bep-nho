@@ -37,6 +37,58 @@ export function effectiveTasteState(state: TasteDimensionState): { score: number
     : { score: clampTaste(state.manualOverride), confidence: 1 };
 }
 
+export type PersonalizedVersionIdentity = {
+  id: string;
+  originType: 'taste_engine' | 'user_edit';
+};
+
+export type PersonalizationVersionOverview<T extends PersonalizedVersionIdentity> = {
+  latestEngine: T | null;
+  latestAny: T | null;
+  bestVersion: T | null;
+};
+
+export function selectDefaultPersonalizedVersion<T extends PersonalizedVersionIdentity>(
+  overview: PersonalizationVersionOverview<T>,
+): T | null {
+  return overview.bestVersion ?? overview.latestAny ?? overview.latestEngine;
+}
+
+export type PersonalizedVersionChoice<T extends PersonalizedVersionIdentity> = {
+  kind: 'best' | 'latest' | 'engine';
+  label: string;
+  version: T;
+};
+
+export function distinctPersonalizedVersionChoices<T extends PersonalizedVersionIdentity>(
+  overview: PersonalizationVersionOverview<T>,
+): Array<PersonalizedVersionChoice<T>> {
+  const choices: Array<PersonalizedVersionChoice<T>> = [];
+  const seen = new Set<string>();
+  const add = (choice: PersonalizedVersionChoice<T> | null) => {
+    if (!choice || seen.has(choice.version.id)) return;
+    seen.add(choice.version.id);
+    choices.push(choice);
+  };
+
+  add(overview.bestVersion ? { kind: 'best', label: 'Bản ngon nhất', version: overview.bestVersion } : null);
+  add(overview.latestAny ? {
+    kind: 'latest',
+    label: overview.latestAny.originType === 'user_edit' ? 'Bản chỉnh gần nhất' : 'Bản cá nhân gần nhất',
+    version: overview.latestAny,
+  } : null);
+  add(overview.latestEngine ? {
+    kind: 'engine', label: 'Gợi ý mới nhất', version: overview.latestEngine,
+  } : null);
+  return choices;
+}
+
+export function decisionSourceVersionId(
+  activeVersion: PersonalizedVersionIdentity | null,
+): string | null {
+  return activeVersion?.id ?? null;
+}
+
 export type RecipeStatus = 'draft' | 'published' | 'archived';
 export type ScalingMode = 'LINEAR' | 'CONSERVATIVE' | 'FIXED';
 

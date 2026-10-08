@@ -3,7 +3,12 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { scaleIngredientQuantity } from '@bep-nho/domain';
+import {
+  decisionSourceVersionId,
+  distinctPersonalizedVersionChoices,
+  scaleIngredientQuantity,
+  selectDefaultPersonalizedVersion,
+} from '@bep-nho/domain';
 import { ApiRequestError, apiRequest, getErrorMessage } from '../../../lib/api';
 import { loadCurrentUser } from '../../../lib/current-user';
 import type { CurrentUserContext } from '../../../lib/current-user';
@@ -11,6 +16,7 @@ import type {
   CookSessionResponse,
   PersonalizedIngredient,
   PersonalizedAdjustmentDecisionResponse,
+  PersonalizedAdjustmentDecisionsResponse,
   PersonalizationOverviewResponse,
   PersonalizedResponse,
   PersonalizedVersion,
@@ -33,6 +39,7 @@ export default function RecipePage() {
   const [currentUser, setCurrentUser] = useState<CurrentUserContext | null>(null);
   const [personalized, setPersonalized] = useState<PersonalizedVersion | null>(null);
   const [overview, setOverview] = useState<PersonalizationOverviewResponse['data'] | null>(null);
+  const [decisions, setDecisions] = useState<PersonalizedAdjustmentDecisionsResponse['data']>([]);
   const [editQuantities, setEditQuantities] = useState<Record<string, string>>({});
   const [servings, setServings] = useState(2);
   const [checked, setChecked] = useState(false);
@@ -56,7 +63,7 @@ export default function RecipePage() {
           const latest = await apiRequest<PersonalizationOverviewResponse>(`/me/recipes/${slug}/personalized-versions/overview`);
           if (active) {
             setOverview(latest.data);
-            const selected = latest.data.bestVersion ?? latest.data.latestEngine ?? latest.data.latestAny;
+            const selected = selectDefaultPersonalizedVersion(latest.data);
             setPersonalized(selected);
             if (selected) setServings(selected.snapshot.servings);
           }
@@ -72,6 +79,23 @@ export default function RecipePage() {
     void load();
     return () => { active = false; };
   }, [slug, reloadKey]);
+
+  useEffect(() => {
+    let active = true;
+    const versionId = decisionSourceVersionId(personalized);
+    if (!versionId) {
+      setDecisions([]);
+      return () => { active = false; };
+    }
+    void apiRequest<PersonalizedAdjustmentDecisionsResponse>(
+      `/me/recipes/${slug}/personalized-versions/${versionId}/decisions`,
+    ).then((response) => {
+      if (active) setDecisions(response.data);
+    }).catch(() => {
+      if (active) setDecisions([]);
+    });
+    return () => { active = false; };
+  }, [personalized, slug]);
 
   const previewIngredients = useMemo(() => {
     if (!recipe) return [];
@@ -155,15 +179,24 @@ export default function RecipePage() {
   }
 
   async function reviewAdjustment(ingredientSlug: string, action: 'ACCEPT' | 'REJECT' | 'EDIT') {
-    if (!recipe || !overview?.latestEngine) return;
+    const sourceVersionId = decisionSourceVersionId(personalized);
+    if (!recipe || !sourceVersionId) return;
     setBusy(true); setError(null);
     try {
       const quantity = action === 'EDIT' ? Number(editQuantities[ingredientSlug]) : undefined;
       const response = await apiRequest<PersonalizedAdjustmentDecisionResponse>(
-        `/me/recipes/${recipe.data.slug}/personalized-versions/${overview.latestEngine.id}/adjustments/${ingredientSlug}/decisions`,
+        `/me/recipes/${recipe.data.slug}/personalized-versions/${sourceVersionId}/adjustments/${ingredientSlug}/decisions`,
         { method: 'POST', body: JSON.stringify({ action, ...(action === 'EDIT' ? { quantity } : {}) }) },
       );
-      if (response.data.resultVersion) setPersonalized(response.data.resultVersion);
+      if (response.data.resultVersion) {
+        setPersonalized(response.data.resultVersion);
+        setDecisions([]);
+      } else {
+        const refreshedDecisions = await apiRequest<PersonalizedAdjustmentDecisionsResponse>(
+          `/me/recipes/${recipe.data.slug}/personalized-versions/${sourceVersionId}/decisions`,
+        );
+        setDecisions(refreshedDecisions.data);
+      }
       const refreshed = await apiRequest<PersonalizationOverviewResponse>(`/me/recipes/${recipe.data.slug}/personalized-versions/overview`);
       setOverview(refreshed.data);
     } catch (cause) {
@@ -183,8 +216,12 @@ export default function RecipePage() {
   const totalTime = (personalized?.snapshot.prepTimeMinutes ?? base.prepTimeMinutes ?? 0)
     + (personalized?.snapshot.cookTimeMinutes ?? base.cookTimeMinutes ?? 0);
   const adjustments = personalized?.snapshot.adjustments ?? [];
-  const suggestion = overview?.latestEngine ?? null;
   const best = overview?.bestVersion ?? null;
+  const versionChoices = overview ? distinctPersonalizedVersionChoices(overview) : [];
+  const resolvedIngredientSlugs = new Set(decisions.map((decision) => decision.ingredientSlug));
+  const reviewableAdjustments = (personalized?.snapshot.adjustments ?? []).filter((item) =>
+    (item.reviewStatus === undefined || item.reviewStatus === 'pending')
+    && !resolvedIngredientSlugs.has(item.ingredientSlug));
   const activeLabel = personalized
     ? best?.id === personalized.id ? 'Bản tốt nhất của bạn' : personalized.originType === 'taste_engine' ? 'Gợi ý Taste DNA' : 'Bản bạn đã chỉnh'
     : 'Bản chuẩn';
@@ -217,9 +254,9 @@ export default function RecipePage() {
         <aside className="detailVisual"><span className="heroBowl" aria-hidden="true"><i /><i /><i /></span><div className="versionSeal"><small>{personalized ? 'Phiên bản của bạn' : 'Phiên bản chuẩn'}</small><strong>V{personalized?.versionNo ?? base.versionNo}</strong></div></aside>
       </section>
 
-      {personalized && <section className="personalizationBanner"><div><div className="smallLabel light">{activeLabel}</div><h2>{adjustments.length > 0 ? `${adjustments.length} nguyên liệu được tinh chỉnh` : 'Công thức đang hợp khẩu vị của bạn'}</h2><p>Gợi ý mới không tự thay “Bản tốt nhất”; phiên nấu luôn dùng đúng version bạn chọn.</p></div><div className="versionChoices">{suggestion && <button type="button" disabled={busy || suggestion.id === personalized.id} onClick={() => { setPersonalized(suggestion); setServings(suggestion.snapshot.servings); }}>Xem gợi ý V{suggestion.versionNo}</button>}{best && <button type="button" disabled={busy || best.id === personalized.id} onClick={() => { setPersonalized(best); setServings(best.snapshot.servings); }}>Xem bản tốt nhất V{best.versionNo}</button>}{best?.id === personalized.id ? <button type="button" disabled={busy} onClick={() => void unpinBest()}>Bỏ ghim bản tốt nhất</button> : <button type="button" disabled={busy} onClick={() => void pinBest(personalized)}>Lưu làm bản tốt nhất</button>}</div><button className="textButton" type="button" disabled={busy} onClick={() => void createPersonalized()}>Làm mới gợi ý theo Taste DNA</button></section>}
+      {personalized && <section className="personalizationBanner"><div><div className="smallLabel light">{activeLabel}</div><h2>{adjustments.length > 0 ? `${adjustments.length} nguyên liệu được tinh chỉnh` : 'Công thức đang hợp khẩu vị của bạn'}</h2><p>Gợi ý mới không tự thay “Bản tốt nhất”; phiên nấu luôn dùng đúng version bạn chọn.</p></div><div className="versionChoices">{versionChoices.map((choice) => <button key={choice.version.id} type="button" disabled={busy || choice.version.id === personalized.id} onClick={() => { setPersonalized(choice.version); setServings(choice.version.snapshot.servings); }}>{choice.label} · V{choice.version.versionNo}</button>)}{best?.id === personalized.id ? <button type="button" disabled={busy} onClick={() => void unpinBest()}>Bỏ ghim bản tốt nhất</button> : <button type="button" disabled={busy} onClick={() => void pinBest(personalized)}>Lưu làm bản tốt nhất</button>}</div><button className="textButton" type="button" disabled={busy} onClick={() => void createPersonalized()}>Làm mới gợi ý theo Taste DNA</button></section>}
 
-      {suggestion && suggestion.snapshot.adjustments.length > 0 && <section className="adjustmentReview panel"><div className="panelTitle"><div><span>✓</span><h2>Duyệt gợi ý mới nhất</h2></div><small>Gợi ý V{suggestion.versionNo}</small></div><p className="mutedCopy">Chấp nhận chỉ ghi nhận lựa chọn. Từ chối hoặc sửa sẽ tạo hay tái dùng một version bất biến.</p><div className="reviewList">{suggestion.snapshot.adjustments.map((item) => <article key={item.ingredientSlug}><div><strong>{item.ingredientName}</strong><span>{formatQuantity(item.baseQuantity)} → {formatQuantity(item.quantity)} {item.unit}</span></div><div className="reviewActions"><button type="button" disabled={busy} onClick={() => void reviewAdjustment(item.ingredientSlug, 'ACCEPT')}>Chấp nhận</button><button type="button" disabled={busy} onClick={() => void reviewAdjustment(item.ingredientSlug, 'REJECT')}>Giữ bản chuẩn</button><label><span>Sửa lượng</span><input inputMode="decimal" placeholder={formatQuantity(item.quantity)} value={editQuantities[item.ingredientSlug] ?? ''} onChange={(event) => setEditQuantities((current) => ({ ...current, [item.ingredientSlug]: event.target.value }))} /></label><button type="button" disabled={busy || !editQuantities[item.ingredientSlug]} onClick={() => void reviewAdjustment(item.ingredientSlug, 'EDIT')}>Lưu sửa</button></div></article>)}</div></section>}
+      {personalized && reviewableAdjustments.length > 0 && <section className="adjustmentReview panel"><div className="panelTitle"><div><span>✓</span><h2>Duyệt các thay đổi còn lại</h2></div><small>{activeLabel} · V{personalized.versionNo}</small></div><p className="mutedCopy">Mỗi lựa chọn tiếp theo được áp dụng lên đúng bản đang xem. Chấp nhận chỉ ghi nhận; từ chối hoặc sửa sẽ tạo hay tái dùng một version bất biến.</p><div className="reviewList">{reviewableAdjustments.map((item) => <article key={item.ingredientSlug}><div><strong>{item.ingredientName}</strong><span>{formatQuantity(item.baseQuantity)} → {formatQuantity(item.quantity)} {item.unit}</span></div><div className="reviewActions"><button type="button" disabled={busy} onClick={() => void reviewAdjustment(item.ingredientSlug, 'ACCEPT')}>Giữ thay đổi</button><button type="button" disabled={busy} onClick={() => void reviewAdjustment(item.ingredientSlug, 'REJECT')}>Hoàn tác</button><label><span>Chỉnh lượng</span><input inputMode="decimal" placeholder={formatQuantity(item.quantity)} value={editQuantities[item.ingredientSlug] ?? ''} onChange={(event) => setEditQuantities((current) => ({ ...current, [item.ingredientSlug]: event.target.value }))} /></label><button type="button" disabled={busy || !editQuantities[item.ingredientSlug]} onClick={() => void reviewAdjustment(item.ingredientSlug, 'EDIT')}>Lưu chỉnh</button></div></article>)}</div></section>}
 
       <div className="contentGrid">
         <section className="panel ingredientPanel"><div className="panelTitle"><div><span>01</span><h2>Chuẩn bị nguyên liệu</h2></div><small>{previewIngredients.length} thứ</small></div><ul className="ingredientList">{previewIngredients.map((item) => <li key={item.id} className="ingredient"><div><strong>{item.name}</strong>{item.preparation && <span>{item.preparation}</span>}{item.note && <span>{item.note}</span>}</div><div className={Math.abs(item.personalizationFactor - 1) > 0.000001 ? 'ingredientAmount adjusted' : 'ingredientAmount'}><b>{formatQuantity(item.quantity)} {item.unit}</b></div></li>)}</ul></section>

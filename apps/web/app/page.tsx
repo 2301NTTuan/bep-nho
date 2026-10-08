@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { apiRequest, getErrorMessage } from '../lib/api';
-import { loadCurrentUser } from '../lib/current-user';
+import { ApiRequestError, apiRequest, getErrorMessage } from '../lib/api';
+import { establishDevelopmentSession, loadCurrentUser, logoutCurrentUser } from '../lib/current-user';
 import type { CurrentUserContext } from '../lib/current-user';
 import type { RecipeListResponse } from '../lib/types';
 
@@ -19,6 +19,8 @@ function Brand() {
 export default function Home() {
   const [recipes, setRecipes] = useState<RecipeListResponse | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUserContext | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -28,22 +30,51 @@ export default function Home() {
     async function load() {
       setError(null);
       try {
-        const [recipeData, userContext] = await Promise.all([
-          apiRequest<RecipeListResponse>('/recipes?limit=24'),
-          loadCurrentUser(),
-        ]);
+        const recipeData = await apiRequest<RecipeListResponse>('/recipes?limit=24');
         if (active) {
           setRecipes(recipeData);
-          setCurrentUser(userContext);
         }
       } catch (cause) {
         if (active) setError(getErrorMessage(cause, 'Không mở được sổ công thức.'));
       }
     }
 
+    async function loadIdentity() {
+      try {
+        const userContext = await loadCurrentUser();
+        if (active) setCurrentUser(userContext);
+      } catch (cause) {
+        if (!(cause instanceof ApiRequestError && cause.status === 401) && active) {
+          setError(getErrorMessage(cause, 'Không tải được thông tin tài khoản.'));
+        }
+      } finally {
+        if (active) setAuthChecked(true);
+      }
+    }
+
     void load();
+    void loadIdentity();
     return () => { active = false; };
   }, [reloadKey]);
+
+  async function useDevelopmentAccount() {
+    setAuthBusy(true); setError(null);
+    try {
+      setCurrentUser(await establishDevelopmentSession());
+    } catch (cause) {
+      setError(getErrorMessage(cause, 'Không thể mở phiên phát triển.'));
+    } finally { setAuthBusy(false); setAuthChecked(true); }
+  }
+
+  async function logout() {
+    setAuthBusy(true); setError(null);
+    try {
+      await logoutCurrentUser();
+      setCurrentUser(null);
+    } catch (cause) {
+      setError(getErrorMessage(cause, 'Không thể đăng xuất.'));
+    } finally { setAuthBusy(false); }
+  }
 
   const taste = currentUser?.tasteProfile;
 
@@ -53,7 +84,11 @@ export default function Home() {
         <Brand />
         <nav className="topnav" aria-label="Điều hướng chính">
           <a href="#recipes">Món hôm nay</a>
-          <span className="statusDot"><i /> Bếp đang mở</span>
+          {currentUser ? (
+            <button className="navAction" type="button" disabled={authBusy} onClick={() => void logout()}>Đăng xuất</button>
+          ) : authChecked ? (
+            <><Link href="/login">Đăng nhập</Link><Link href="/register" className="navAction">Tạo tài khoản</Link></>
+          ) : null}
         </nav>
       </header>
 
@@ -63,6 +98,11 @@ export default function Home() {
           <h1>Càng nấu, Bếp Nhớ càng <em>hiểu khẩu vị</em> của bạn.</h1>
           <p>Mỗi lần vào bếp là một lần công thức được tinh chỉnh vừa đủ — có lý do, có giới hạn và luôn giữ lại phiên bản bạn đã nấu.</p>
           <a className="button heroAction" href="#recipes">Chọn món để nấu <span aria-hidden="true">↓</span></a>
+          {!currentUser && authChecked && process.env.NODE_ENV !== 'production' && (
+            <button className="devSessionAction" type="button" disabled={authBusy} onClick={() => void useDevelopmentAccount()}>
+              {authBusy ? 'Đang mở bếp dev…' : 'Dùng tài khoản dev'}
+            </button>
+          )}
           <div className="heroProof" aria-label="Đặc tính của Bếp Nhớ">
             <span><b>01</b> Công thức chuẩn</span>
             <span><b>02</b> Học sau mỗi lần nấu</span>

@@ -7,24 +7,24 @@ export interface CurrentUserProvider {
   load(): Promise<CurrentUserContext>;
 }
 
-class DevelopmentCurrentUserProvider implements CurrentUserProvider {
+class SessionCurrentUserProvider implements CurrentUserProvider {
   async load(): Promise<CurrentUserContext> {
-    const response = await apiRequest<CurrentUserResponse>('/dev/bootstrap');
+    const response = await apiRequest<CurrentUserResponse>('/me');
     return response.data;
   }
 }
 
-class UnconfiguredCurrentUserProvider implements CurrentUserProvider {
-  async load(): Promise<CurrentUserContext> {
-    throw new Error('Đăng nhập chưa được cấu hình cho môi trường này.');
-  }
-}
-
-const provider: CurrentUserProvider =
-  process.env.NODE_ENV === 'production'
-    ? new UnconfiguredCurrentUserProvider()
-    : new DevelopmentCurrentUserProvider();
+const provider: CurrentUserProvider = new SessionCurrentUserProvider();
 
 export function loadCurrentUser(): Promise<CurrentUserContext> {
   return provider.load();
+}
+
+export async function establishDevelopmentSession(): Promise<CurrentUserContext> {
+  const response = await apiRequest<CurrentUserResponse>('/dev/session', { method: 'POST' });
+  return response.data;
+}
+
+export async function logoutCurrentUser(): Promise<void> {
+  await apiRequest('/auth/logout', { method: 'POST' });
 }

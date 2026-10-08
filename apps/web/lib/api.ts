@@ -55,6 +55,9 @@ export async function apiRequest<T>(
       {
         ...init,
 
+        credentials:
+          'include',
+
         headers: {
           accept:
             'application/json',

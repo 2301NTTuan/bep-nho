@@ -59,6 +59,7 @@ export default function RecipePage() {
   const { slug } = useParams<{ slug: string }>();
   const [recipe, setRecipe] = useState<RecipeDetailResponse | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUserContext | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [personalized, setPersonalized] = useState<PersonalizedVersion | null>(null);
   const [session, setSession] = useState<CookSessionResponse | null>(null);
   const [stage, setStage] = useState<Stage>('detail');
@@ -78,18 +79,20 @@ export default function RecipePage() {
     async function load() {
       setError(null);
       try {
-        const [recipeData, userContext] = await Promise.all([
-          apiRequest<RecipeDetailResponse>(`/recipes/${slug}`),
-          loadCurrentUser(),
-        ]);
+        const recipeData = await apiRequest<RecipeDetailResponse>(`/recipes/${slug}`);
         if (!active) return;
         setRecipe(recipeData);
-        setCurrentUser(userContext);
+
         try {
-          const latest = await apiRequest<PersonalizedResponse>(`/users/${userContext.user.id}/recipes/${slug}/personalized-versions/latest`);
+          const userContext = await loadCurrentUser();
+          if (!active) return;
+          setCurrentUser(userContext);
+          const latest = await apiRequest<PersonalizedResponse>(`/me/recipes/${slug}/personalized-versions/latest`);
           if (active) setPersonalized(latest.data);
         } catch (cause) {
-          if (!(cause instanceof ApiRequestError && cause.status === 404)) throw cause;
+          if (!(cause instanceof ApiRequestError && (cause.status === 401 || cause.status === 404))) throw cause;
+        } finally {
+          if (active) setAuthChecked(true);
         }
       } catch (cause) {
         if (active) setError(getErrorMessage(cause, 'Không tải được món ăn.'));
@@ -114,7 +117,7 @@ export default function RecipePage() {
     if (!currentUser || !recipe) return;
     setBusy(true); setError(null);
     try {
-      const response = await apiRequest<PersonalizedResponse>(`/users/${currentUser.user.id}/recipes/${recipe.data.slug}/personalized-versions`, { method: 'POST' });
+      const response = await apiRequest<PersonalizedResponse>(`/me/recipes/${recipe.data.slug}/personalized-versions`, { method: 'POST' });
       setPersonalized(response.data);
     } catch (cause) {
       setError(getErrorMessage(cause, 'Chưa thể tạo công thức cá nhân lúc này.'));
@@ -128,7 +131,6 @@ export default function RecipePage() {
       const result = await apiRequest<CookSessionResponse>('/cook-sessions', {
         method: 'POST',
         body: JSON.stringify({
-          userId: currentUser.user.id,
           recipeSlug: recipe.data.slug,
           personalizedRecipeVersionId: usePersonalized ? personalized?.id : undefined,
         }),
@@ -180,7 +182,7 @@ export default function RecipePage() {
         method: 'POST',
         body: JSON.stringify({ overallScore: overall, dimensions, technicalFlags, privateNote: note || undefined }),
       });
-      const next = await apiRequest<PersonalizedResponse>(`/users/${currentUser.user.id}/recipes/${recipe.data.slug}/personalized-versions`, { method: 'POST' });
+      const next = await apiRequest<PersonalizedResponse>(`/me/recipes/${recipe.data.slug}/personalized-versions`, { method: 'POST' });
       setPersonalized(next.data); setStage('done');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (cause) {
@@ -199,7 +201,7 @@ export default function RecipePage() {
       </main>
     );
   }
-  if (!recipe || !currentUser || !base) return <LoadingRecipe />;
+  if (!recipe || !base || !authChecked) return <LoadingRecipe />;
 
   const currentStep = activeSteps[stepIndex];
   const hasTasteAnswer = saltiness !== null || garlicOnion !== null || softness !== null;
@@ -291,8 +293,11 @@ export default function RecipePage() {
           <p>{personalized?.snapshot.summary ?? base.summary}</p>
           <div className="detailStats"><span><b>{totalTime}</b> phút</span><span><b>{personalized?.snapshot.servings ?? base.servings}</b> phần ăn</span><span><b>{base.steps.length}</b> bước nấu</span></div>
           <div className="actions primaryActions">
-            {personalized ? <button type="button" className="button" disabled={busy} onClick={() => void startCooking(true)}>Bắt đầu nấu bản của tôi →</button> : <button type="button" className="button" disabled={busy} onClick={() => void ensurePersonalized()}>{busy ? 'Đang lắng nghe khẩu vị…' : 'Tạo công thức cho tôi →'}</button>}
-            <button type="button" className="button secondary" disabled={busy} onClick={() => void startCooking(false)}>Nấu bản chuẩn</button>
+            {!currentUser ? (
+              <><Link href="/login" className="button">Đăng nhập để bắt đầu nấu →</Link><Link href="/register" className="button secondary">Tạo tài khoản</Link></>
+            ) : (
+              <>{personalized ? <button type="button" className="button" disabled={busy} onClick={() => void startCooking(true)}>Bắt đầu nấu bản của tôi →</button> : <button type="button" className="button" disabled={busy} onClick={() => void ensurePersonalized()}>{busy ? 'Đang lắng nghe khẩu vị…' : 'Tạo công thức cho tôi →'}</button>}<button type="button" className="button secondary" disabled={busy} onClick={() => void startCooking(false)}>Nấu bản chuẩn</button></>
+            )}
           </div>
           {error && <div className="inlineError" role="alert">{error}</div>}
         </div>
@@ -321,7 +326,7 @@ export default function RecipePage() {
           <ol className="stepList">{(personalized?.snapshot.steps ?? base.steps).map((step) => <li key={step.stepNo} className="stepItem"><span className="stepNumber">{String(step.stepNo).padStart(2, '0')}</span><div><p>{step.instruction}</p><div className="stepMeta">{durationText(step.durationSeconds) && <span>{durationText(step.durationSeconds)}</span>}{step.heatLevel && <span>Lửa {step.heatLevel}</span>}</div>{step.tip && <aside className="tip"><b>Mẹo</b> {step.tip}</aside>}</div></li>)}</ol>
         </section>
       </div>
-      <div className="stickyCook"><div><strong>{personalized ? `Bản của bạn · V${personalized.versionNo}` : `Bản chuẩn · V${base.versionNo}`}</strong><span>{totalTime} phút · {personalized?.snapshot.servings ?? base.servings} phần</span></div><button className="button" disabled={busy} onClick={() => void startCooking(Boolean(personalized))}>Bắt đầu nấu →</button></div>
+      <div className="stickyCook"><div><strong>{personalized ? `Bản của bạn · V${personalized.versionNo}` : `Bản chuẩn · V${base.versionNo}`}</strong><span>{totalTime} phút · {personalized?.snapshot.servings ?? base.servings} phần</span></div>{currentUser ? <button className="button" disabled={busy} onClick={() => void startCooking(Boolean(personalized))}>Bắt đầu nấu →</button> : <Link className="button" href="/login">Đăng nhập để nấu →</Link>}</div>
       <footer className="detailFooter">Công thức cá nhân hóa bằng deterministic Taste Engine · Luôn giữ đúng phiên bản đã nấu</footer>
     </main>
   );

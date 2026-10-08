@@ -1,5 +1,7 @@
 export type {
   CookSessionResponse,
+  ActiveCookSessionResponse,
+  CookSnapshot,
   CurrentUserResponse as DevBootstrapResponse,
   AuthCredentials,
   LogoutResponse,

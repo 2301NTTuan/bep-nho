@@ -1,5 +1,6 @@
 import { apiRequest } from './api';
 import type { CurrentUserContext, CurrentUserResponse } from '@bep-nho/contracts';
+import { clearCookQueue } from './cook-event-queue';
 
 export type { CurrentUserContext } from '@bep-nho/contracts';
 
@@ -25,6 +26,7 @@ export async function establishDevelopmentSession(): Promise<CurrentUserContext>
   return response.data;
 }
 
-export async function logoutCurrentUser(): Promise<void> {
+export async function logoutCurrentUser(userId?: string): Promise<void> {
   await apiRequest('/auth/logout', { method: 'POST' });
+  if (userId) await clearCookQueue(userId);
 }

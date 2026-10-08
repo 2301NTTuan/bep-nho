@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { ApiRequestError, apiRequest, getErrorMessage } from '../lib/api';
 import { establishDevelopmentSession, loadCurrentUser, logoutCurrentUser } from '../lib/current-user';
 import type { CurrentUserContext } from '../lib/current-user';
-import type { RecipeListResponse } from '../lib/types';
+import type { ActiveCookSessionResponse, RecipeListResponse } from '../lib/types';
 
 function Brand() {
   return (
@@ -23,6 +23,8 @@ export default function Home() {
   const [authBusy, setAuthBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [activeSession, setActiveSession] = useState<ActiveCookSessionResponse | null>(null);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -43,6 +45,12 @@ export default function Home() {
       try {
         const userContext = await loadCurrentUser();
         if (active) setCurrentUser(userContext);
+        try {
+          const session = await apiRequest<ActiveCookSessionResponse>('/me/cook-sessions/active');
+          if (active) setActiveSession(session);
+        } catch (cause) {
+          if (!(cause instanceof ApiRequestError && cause.status === 404)) throw cause;
+        }
       } catch (cause) {
         if (!(cause instanceof ApiRequestError && cause.status === 401) && active) {
           setError(getErrorMessage(cause, 'Không tải được thông tin tài khoản.'));
@@ -69,14 +77,18 @@ export default function Home() {
   async function logout() {
     setAuthBusy(true); setError(null);
     try {
-      await logoutCurrentUser();
+      await logoutCurrentUser(currentUser?.user.id);
       setCurrentUser(null);
+      setActiveSession(null);
     } catch (cause) {
       setError(getErrorMessage(cause, 'Không thể đăng xuất.'));
     } finally { setAuthBusy(false); }
   }
 
   const taste = currentUser?.tasteProfile;
+  const filteredRecipes = recipes?.data.filter((recipe) =>
+    recipe.title.toLocaleLowerCase('vi').includes(query.trim().toLocaleLowerCase('vi')),
+  );
 
   return (
     <main className="shell homeShell">
@@ -128,6 +140,17 @@ export default function Home() {
           {recipes && <p>{recipes.meta.count} công thức thử nghiệm</p>}
         </div>
 
+        {activeSession && (
+          <Link className="resumeBanner" href={`/cook/${activeSession.data.id}`}>
+            <span>Đang nấu dở</span><strong>{activeSession.data.snapshot.recipe.title}</strong><b>Tiếp tục →</b>
+          </Link>
+        )}
+
+        <label className="recipeSearch">
+          <span>Tìm món</span>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ví dụ: trứng, gà, canh…" />
+        </label>
+
         {error && (
           <div className="stateCard errorState" role="alert">
             <span className="stateIcon">!</span><div><strong>Gian bếp đang tạm gián đoạn</strong><p>{error}</p></div>
@@ -141,13 +164,13 @@ export default function Home() {
           </div>
         )}
 
-        {recipes?.data.length === 0 && (
+        {filteredRecipes?.length === 0 && (
           <div className="stateCard"><span className="stateIcon">○</span><div><strong>Sổ công thức còn trống</strong><p>Các món Việt đầu tiên đang được chuẩn bị.</p></div></div>
         )}
 
-        {recipes && recipes.data.length > 0 && (
+        {recipes && filteredRecipes && filteredRecipes.length > 0 && (
           <div className="recipeGrid">
-            {recipes.data.map((recipe, index) => {
+            {filteredRecipes.map((recipe, index) => {
               const version = recipe.latestVersion;
               const totalTime = (version?.prepTimeMinutes ?? 0) + (version?.cookTimeMinutes ?? 0);
               return (

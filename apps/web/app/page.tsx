@@ -96,6 +96,7 @@ export default function Home() {
         <Brand />
         <nav className="topnav" aria-label="Điều hướng chính">
           <a href="#recipes">Món hôm nay</a>
+          {currentUser && <Link href="/taste">Taste DNA</Link>}
           {currentUser ? (
             <button className="navAction" type="button" disabled={authBusy} onClick={() => void logout()}>Đăng xuất</button>
           ) : authChecked ? (
@@ -131,6 +132,7 @@ export default function Home() {
           </div>
           <div className="tasteProgress" aria-hidden="true"><span style={{ width: `${Math.max(4, (taste?.maturityScore ?? 0) * 100)}%` }} /></div>
           <div className="tasteMeta"><span>{taste?.sampleCount ?? 0}</span> lần nấu đã góp vào khẩu vị</div>
+          {currentUser && <Link href="/taste" className="tasteLink">Xem và điều khiển Taste DNA →</Link>}
         </aside>
       </section>
 

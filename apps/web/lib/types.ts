@@ -6,6 +6,8 @@ export type {
   AuthCredentials,
   LogoutResponse,
   PersonalizedIngredient,
+  PersonalizedAdjustmentDecisionResponse,
+  PersonalizationOverviewResponse,
   PersonalizedResponse,
   PersonalizedSnapshot,
   PersonalizedVersion,
@@ -14,4 +16,6 @@ export type {
   RecipeListItem,
   RecipeListResponse,
   RecipeStep,
+  TasteHistoryResponse,
+  TasteProfileResponse,
 } from '@bep-nho/contracts';

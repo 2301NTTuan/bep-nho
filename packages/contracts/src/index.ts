@@ -52,6 +52,8 @@ export type PersonalizedSnapshot = {
   adjustments: Array<{
     ingredientSlug: string; ingredientName: string; baseQuantity: number;
     quantity: number; unit: string; deltaPercent: number;
+    reviewStatus?: 'pending' | 'accepted' | 'edited';
+    originType?: 'taste_engine' | 'user_edit';
   }>;
   tasteEvidence: {
     tasteProfileId: string; algorithmVersion: string; sampleCount: number; maturityScore: number;
@@ -83,6 +85,7 @@ export type PersonalizedAdjustmentDecision = {
   createdAt: string; resultVersion: PersonalizedVersion | null;
 };
 export type PersonalizedAdjustmentDecisionResponse = ApiEnvelope<PersonalizedAdjustmentDecision>;
+export type PersonalizedAdjustmentDecisionsResponse = ApiEnvelope<PersonalizedAdjustmentDecision[]>;
 
 export type CurrentUserContext = {
   environment?: string;

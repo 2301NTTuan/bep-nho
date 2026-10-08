@@ -429,6 +429,12 @@ export class PersonalizationService {
 
               deltaPercent,
 
+              reviewStatus:
+                'pending',
+
+              originType:
+                'taste_engine',
+
               rules:
                 appliedRules,
             });
@@ -850,6 +856,35 @@ export class PersonalizationService {
       let resultVersion = null;
       if (action !== 'ACCEPT') {
         const nextSnapshot = structuredClone(snapshot);
+        const priorDecisions = await tx.personalizedAdjustmentDecision.findMany({
+          where: { userId, sourcePersonalizedRecipeVersionId: source.id },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        });
+        const latestDecisionByIngredient = new Map<string, string>();
+        for (const prior of priorDecisions) {
+          if (!latestDecisionByIngredient.has(prior.ingredientId)) {
+            latestDecisionByIngredient.set(prior.ingredientId, prior.action);
+          }
+        }
+        nextSnapshot.adjustments = nextSnapshot.adjustments
+          .filter((item) => latestDecisionByIngredient.get(
+            nextSnapshot.ingredients.find((ingredient) => ingredient.slug === item.ingredientSlug)?.id ?? '',
+          ) !== 'REJECT')
+          .map((item) => {
+            const itemIngredient = nextSnapshot.ingredients.find(
+              (candidate) => candidate.slug === item.ingredientSlug,
+            );
+            const priorAction = itemIngredient
+              ? latestDecisionByIngredient.get(itemIngredient.id)
+              : undefined;
+            return priorAction === 'ACCEPT' || priorAction === 'EDIT'
+              ? {
+                  ...item,
+                  reviewStatus: priorAction === 'ACCEPT' ? 'accepted' as const : 'edited' as const,
+                  originType: priorAction === 'EDIT' ? 'user_edit' as const : item.originType,
+                }
+              : item;
+          });
         const nextIngredient = nextSnapshot.ingredients.find((item) => item.slug === ingredientSlug);
         if (!nextIngredient) throw new BadRequestException('Adjusted ingredient was not found');
         const factor = baseQuantity === 0 ? 1 : quantity / baseQuantity;
@@ -862,7 +897,13 @@ export class PersonalizationService {
         nextSnapshot.adjustments = action === 'REJECT'
           ? nextSnapshot.adjustments.filter((item) => item.ingredientSlug !== ingredientSlug)
           : nextSnapshot.adjustments.map((item) => item.ingredientSlug === ingredientSlug
-            ? { ...item, quantity, deltaPercent: nextIngredient.deltaPercent }
+            ? {
+                ...item,
+                quantity,
+                deltaPercent: nextIngredient.deltaPercent,
+                reviewStatus: 'edited',
+                originType: 'user_edit',
+              }
             : item);
 
         const contentHash = this.hash(this.effectiveContent(nextSnapshot, source.algorithmVersion));

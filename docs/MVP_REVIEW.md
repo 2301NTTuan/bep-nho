@@ -1,6 +1,6 @@
 # Bếp Nhớ MVP review
 
-Date: 2026-10-07
+Date: 2026-10-08
 
 ## Current MVP readiness
 
@@ -18,9 +18,9 @@ The web experience now presents this loop coherently on desktop and mobile. It i
 ## Remaining product gaps
 
 - First-party email/password sign-in, revocable cookie sessions, `/v1/me`, and object-level ownership checks are now implemented. Account lifecycle remains incomplete: email verification, password reset, MFA, device/session management, and account deletion are not yet available.
-- Content depth is insufficient: there is one development recipe explicitly awaiting culinary review, with no production media or editorial workflow.
-- Arbitrary serving overrides are intentionally disabled until ingredient-aware culinary scaling is implemented in Phase 7; every session now uses the servings from the exact canonical/personalized snapshot cooked.
-- Cook Mode is online-only; timers are informational and session resume/offline event queueing are not implemented.
+- The internal alpha now has 13 structured Vietnamese home recipes, but they remain explicitly experimental and still need human culinary/editorial review plus production media/workflow.
+- Serving selection supports deterministic ingredient-aware scaling for 1–8 portions, with conservative/fixed modes and practical rounding. Broader culinary calibration still needs editorial testing.
+- Cook Mode now resumes from an immutable server snapshot, persists real timer/progress events, and queues progress briefly offline. Browser E2E, timer pause, multi-device conflict UX, and offline feedback/completion remain open.
 - Users see generated adjustments but cannot explicitly accept, reject, edit, or pin “My Best Version” before future use.
 - Taste DNA has no dedicated history/control screen for explanations, overrides, or reset.
 - The web now has real login/register/logout flows and keeps public recipe browsing available while signed out. Deployment still needs verified same-site cookie/origin configuration and abuse controls.
@@ -28,7 +28,7 @@ The web experience now presents this loop coherently on desktop and mobile. It i
 ## Architectural debt and operational gaps
 
 - API contracts are shared TypeScript definitions, not generated from an OpenAPI source of truth.
-- Domain rules still live mainly in NestJS services. Extract pure deterministic functions before the algorithm grows.
+- Scaling, cook progress, timer restoration, sequencing, and queue reconciliation now live as pure domain utilities. Taste-learning rules still live mainly in NestJS services and should be extracted before they grow.
 - User-owned APIs now have session guards, 404 ownership semantics, Origin checks, and focused security tests. Retry idempotency beyond the hardened cooking paths, login throttling/rate limits, and broader audit controls remain open.
 - The integration suite covers concurrency, provenance, and the domain loop; focused HTTP tests cover standardized conflicts and development-route isolation. Browser accessibility/responsive automation is still missing.
 - There is no production observability baseline (structured logs, metrics, traces, error reporting) or CI workflow enforcing all gates.
@@ -42,7 +42,7 @@ Completed 2026-10-08: first-party scrypt credentials, hashed opaque sessions, `/
 
 ### Phase 7 — Alpha content and cooking reliability
 
-Add 10–20 culinary-reviewed Vietnamese recipes, ingredient-aware serving scaling, active timers, session resume, and a minimal offline event queue. Keep immutable recipe/version semantics.
+Completed 2026-10-08: 13 explicitly experimental Vietnamese home recipes, immutable/version-safe seed content, ingredient-aware 1–8 serving scaling, exact CookSession snapshots, owner-scoped resume, timestamp timers, robust event sequencing, and a user-scoped IndexedDB progress queue. Human culinary review remains outstanding; no verification claim is made.
 
 ### Phase 8 — User control over learning
 
@@ -69,4 +69,14 @@ Do not begin social, pantry, household, or monetization domains before Phases 6�
 - Opaque cookie sessions enforce expiry, revocation, and active-user status; production cookies are HttpOnly, SameSite=Lax, Path=/, and Secure.
 - All cook, feedback, Taste DNA, and personalization ownership is derived from the authenticated session. Foreign resources return 404, and legacy user-ID routes are gone.
 - Stateful browser requests enforce configured origins, while credentialed CORS never emits a wildcard origin.
-- Remaining production blockers are account recovery/verification, abuse protection, deployment/operations hardening, content depth, cooking reliability, and browser accessibility coverage.
+- Remaining production blockers are account recovery/verification, abuse protection, deployment/operations hardening, human culinary review/editorial workflow, user control over learning, and browser accessibility/E2E coverage.
+
+## Phase 7 cooking reliability completed
+
+- Alpha recipes are maintained as validated manifests, and seeding refuses to rewrite an existing canonical version with different content.
+- Scaling is deterministic and shared across API/web: serving scaling precedes Taste factor application and a single practical rounding operation.
+- Every new CookSession stores the exact scaled recipe snapshot atomically. Legacy null snapshots have a non-mutating exact-version compatibility path.
+- Multiple active sessions are intentionally allowed; `/v1/me/cook-sessions/active` resumes only the latest session owned by the authenticated user.
+- Timer and step progress derive from persisted/queued timestamped events. Sequence numbers use the maximum of server and local state.
+- IndexedDB retains failed progress events, acknowledges idempotent duplicates, prevents cross-user replay, contains no credentials, and is cleared for the logging-out user.
+- Feedback begins only after server-confirmed completion. Phase 5.5 integrity and Phase 6 auth/Origin/404 ownership behavior remain covered.

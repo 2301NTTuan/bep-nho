@@ -8,6 +8,8 @@ export const COOK_EVENT_TYPES = [
 ] as const;
 export type CookEventType = (typeof COOK_EVENT_TYPES)[number] | 'session_started';
 export const TECHNICAL_FLAGS = ['burnt', 'undercooked', 'wrong_ingredient'] as const;
+export const SCALING_MODES = ['LINEAR', 'CONSERVATIVE', 'FIXED'] as const;
+export type ScalingMode = (typeof SCALING_MODES)[number];
 
 export type RecipeListItem = {
   id: string; slug: string; title: string; cuisine: string;
@@ -21,6 +23,7 @@ export type RecipeListResponse = ApiEnvelope<RecipeListItem[]> & { meta: ApiMeta
 export type RecipeIngredient = {
   id: string; slug: string; name: string; category: string | null; quantity: number;
   unit: string; preparation: string | null; note: string | null; sortOrder: number;
+  scalingMode: ScalingMode; scalingExponent: number; roundingIncrement: number | null;
 };
 export type RecipeStep = {
   stepNo: number; instruction: string; durationSeconds: number | null;
@@ -38,6 +41,8 @@ export type RecipeDetailResponse = ApiEnvelope<RecipeDetail>;
 
 export type PersonalizedIngredient = RecipeIngredient & {
   baseQuantity: number; personalized: boolean; deltaPercent: number;
+  personalizationFactor: number;
+  appliedRules?: Array<Record<string, unknown>>;
 };
 export type PersonalizedSnapshot = {
   recipe: Pick<RecipeDetail, 'id' | 'slug' | 'title' | 'cuisine'>;
@@ -74,6 +79,29 @@ export type CookSessionEvent = {
   id: string; eventType: CookEventType; clientSeq: number; clientTime: string;
   serverTime: string; payload: unknown; schemaVersion: number;
 };
+export type CookSnapshotIngredient = RecipeIngredient & {
+  canonicalQuantity: number;
+  scaledQuantity: number;
+  personalizationFactor: number;
+  personalized: boolean;
+};
+export type CookSnapshot = {
+  schemaVersion: 1;
+  recipe: { id: string; slug: string; title: string; cuisine: string };
+  canonicalVersion: { id: string; versionNo: number; servings: number };
+  personalizedVersion: {
+    id: string; versionNo: number; algorithmVersion: string;
+  } | null;
+  servings: number;
+  prepTimeMinutes: number | null;
+  cookTimeMinutes: number | null;
+  summary: string | null;
+  ingredients: CookSnapshotIngredient[];
+  steps: RecipeStep[];
+  adjustments: Array<Record<string, unknown>>;
+  scaling: { sourceServings: number; targetServings: number; order: 'serving_then_taste_then_round' };
+  legacyFallback?: boolean;
+};
 export type CookSession = {
   id: string; userId: string; status: string; servings: number; syncVersion: number;
   startedAt: string; completedAt: string | null;
@@ -82,9 +110,11 @@ export type CookSession = {
     versionId: string; versionNo: number; personalizedVersionId: string | null;
     personalizedVersionNo: number | null; personalizationAlgorithm: string | null;
   };
+  snapshot: CookSnapshot;
   events: CookSessionEvent[];
 };
 export type CookSessionResponse = ApiEnvelope<CookSession>;
+export type ActiveCookSessionResponse = CookSessionResponse;
 
 export type TasteDimensionKey =
   | 'saltiness' | 'sweetness' | 'sourness' | 'spiciness' | 'umami'

@@ -16,7 +16,7 @@ import {
 } from '../database/prisma.service';
 
 const ENGINE_VERSION =
-  'personalize-v1';
+  'personalize-v2';
 
 const TASTE_VERSION =
   'taste-v1';
@@ -392,6 +392,9 @@ export class PersonalizationService {
 
             baseQuantity,
 
+            personalizationFactor:
+              factor,
+
             quantity,
 
             unit:
@@ -405,6 +408,17 @@ export class PersonalizationService {
 
             sortOrder:
               row.sortOrder,
+
+            scalingMode:
+              row.scalingMode,
+
+            scalingExponent:
+              Number(row.scalingExponent),
+
+            roundingIncrement:
+              row.roundingIncrement === null
+                ? null
+                : Number(row.roundingIncrement),
 
             personalized:
               appliedRules.length >
@@ -536,6 +550,16 @@ export class PersonalizationService {
 
     const hashInput = {
       algorithmVersion: ENGINE_VERSION,
+      recipe: {
+        id: recipe.id,
+        slug: recipe.slug,
+        title: recipe.canonicalTitle,
+        cuisine: recipe.cuisine,
+      },
+      baseVersion: {
+        id: base.id,
+        versionNo: base.versionNo,
+      },
       servings: snapshot.servings,
       prepTimeMinutes: snapshot.prepTimeMinutes,
       cookTimeMinutes: snapshot.cookTimeMinutes,
@@ -543,10 +567,14 @@ export class PersonalizationService {
       ingredients: ingredients.map((ingredient) => ({
         slug: ingredient.slug,
         quantity: ingredient.quantity,
+        personalizationFactor: ingredient.personalizationFactor,
         unit: ingredient.unit,
         preparation: ingredient.preparation,
         note: ingredient.note,
         sortOrder: ingredient.sortOrder,
+        scalingMode: ingredient.scalingMode,
+        scalingExponent: ingredient.scalingExponent,
+        roundingIncrement: ingredient.roundingIncrement,
       })),
       steps: snapshot.steps.map((step) => ({
         stepNo: step.stepNo,

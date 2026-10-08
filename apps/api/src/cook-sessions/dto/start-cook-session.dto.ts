@@ -1,9 +1,12 @@
 import {
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   Length,
   Matches,
+  Max,
+  Min,
 } from 'class-validator';
 
 export class StartCookSessionDto {
@@ -15,4 +18,10 @@ export class StartCookSessionDto {
   @IsOptional()
   @IsUUID()
   personalizedRecipeVersionId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(8)
+  servings?: number;
 }

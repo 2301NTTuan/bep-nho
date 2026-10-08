@@ -95,3 +95,16 @@ export class CookSessionsController {
     );
   }
 }
+
+@Controller('me/cook-sessions')
+@UseGuards(SessionAuthGuard)
+export class MeCookSessionsController {
+  constructor(private readonly service: CookSessionsService) {}
+
+  @Get('active')
+  active(
+    @CurrentUser() identity: AuthenticatedIdentity,
+  ) {
+    return this.service.latestActive(identity.userId);
+  }
+}

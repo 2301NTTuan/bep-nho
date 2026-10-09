@@ -18,7 +18,7 @@ command -v "$psql_bin" >/dev/null 2>&1 || {
 backup_dir=${BACKUP_DIR:-"$(pwd)/backups"}
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
 backup_path="${backup_dir%/}/bep-nho-${timestamp}.dump"
-source_url=${DATABASE_URL%%\?*}
+source_url=$DATABASE_URL
 
 client_major=$("$pg_dump_bin" --version | sed -E 's/.* ([0-9]+)(\..*)?$/\1/')
 server_version_num=$("$psql_bin" "$source_url" -v ON_ERROR_STOP=1 -Atqc 'SHOW server_version_num;')

@@ -20,16 +20,17 @@ command -v "$psql_bin" >/dev/null 2>&1 || {
   exit 1
 }
 
-target_url=${RESTORE_DATABASE_URL%%\?*}
+target_url=$RESTORE_DATABASE_URL
+target_compare=${target_url%%\?*}
 source_url=${DATABASE_URL:-}
-source_url=${source_url%%\?*}
+source_compare=${source_url%%\?*}
 
-if [[ -n "$source_url" && "$target_url" == "$source_url" && "${ALLOW_SOURCE_RESTORE:-}" != "I_UNDERSTAND_DATA_LOSS" ]]; then
+if [[ -n "$source_url" && "$target_compare" == "$source_compare" && "${ALLOW_SOURCE_RESTORE:-}" != "I_UNDERSTAND_DATA_LOSS" ]]; then
   echo "Refusing to restore into DATABASE_URL. Use a disposable target." >&2
   exit 1
 fi
 
-target_db=${target_url%%\?*}
+target_db=$target_compare
 target_db=${target_db##*/}
 if [[ "$target_db" == "bep_nho" && "${ALLOW_SOURCE_RESTORE:-}" != "I_UNDERSTAND_DATA_LOSS" ]]; then
   echo "Refusing target database named bep_nho without the explicit destructive override." >&2

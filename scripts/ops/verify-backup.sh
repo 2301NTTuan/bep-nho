@@ -15,9 +15,14 @@ done
   exit 1
 }
 
-admin_url=${VERIFY_ADMIN_DATABASE_URL%%\?*}
+admin_url=$VERIFY_ADMIN_DATABASE_URL
+admin_base=${admin_url%%\?*}
+admin_query=''
+if [[ "$admin_url" == *\?* ]]; then
+  admin_query="?${admin_url#*\?}"
+fi
 database_name="bep_nho_restore_verify_$(date -u +%Y%m%d%H%M%S)_$$"
-target_url="${admin_url%/*}/${database_name}"
+target_url="${admin_base%/*}/${database_name}${admin_query}"
 
 cleanup() {
   dropdb --if-exists --force --maintenance-db="$admin_url" "$database_name" >/dev/null 2>&1 || true

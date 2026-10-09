@@ -170,21 +170,47 @@ describe('Phase 11 admin publishing workflow (HTTP integration)', () => {
     expect((await request('/admin/recipes', { cookie: userCookie })).status).toBe(403);
   });
 
-  it('rejects an unchanged clone of a legacy seeded recipe without rewriting it', async () => {
-    const seeded = await prisma.recipe.findFirstOrThrow({
-      where: { status: 'published', slug: { not: { startsWith: 'phase11-' } } },
-      orderBy: { slug: 'asc' },
-      include: {
-        versions: {
-          where: { publishedAt: { not: null } },
-          orderBy: { versionNo: 'desc' },
-          take: 1,
-          select: { id: true, contentHash: true },
-        },
+  it('rejects an unchanged clone whose published source uses a legacy hash format', async () => {
+    const ingredient = await prisma.ingredient.create({
+      data: {
+        slug: ingredientSlugs[0], canonicalName: 'Đậu phụ Phase 11', category: 'protein',
       },
     });
+    const seeded = await prisma.recipe.create({
+      data: {
+        slug: `${slug}-legacy`,
+        canonicalTitle: 'Công thức legacy hash',
+        cuisine: 'vietnamese',
+        status: 'published',
+      },
+    });
+    const source = await prisma.recipeVersion.create({
+      data: {
+        recipeId: seeded.id,
+        versionNo: 1,
+        servings: 2,
+        prepTimeMinutes: 5,
+        cookTimeMinutes: 10,
+        summary: 'Published before the Phase 11 canonical hash shape.',
+        contentHash: '0'.repeat(64),
+        publishedAt: new Date(),
+        ingredients: {
+          create: {
+            ingredientId: ingredient.id,
+            quantity: 200,
+            unit: 'g',
+            sortOrder: 1,
+            scalingMode: 'LINEAR',
+            scalingExponent: 1,
+          },
+        },
+        steps: {
+          create: { stepNo: 1, instruction: 'Nấu fixture legacy.' },
+        },
+      },
+      select: { id: true, contentHash: true },
+    });
     const versionCount = await prisma.recipeVersion.count({ where: { recipeId: seeded.id } });
-    const source = seeded.versions[0];
     const cloneResponse = await request(`/admin/recipes/${seeded.id}/drafts`, {
       method: 'POST', cookie: adminCookie,
     });

@@ -7,6 +7,11 @@ import { AppModule } from './app.module';
 import { PrismaService } from './database/prisma.service';
 import { configureHttp } from './http/configure-http';
 import { hashSessionToken } from './auth/auth.service';
+import {
+  AccountLifecycleLockService,
+  type AccountLifecycleLockOperation,
+  type AccountLifecycleLockPhase,
+} from './auth/account-lifecycle-lock.service';
 
 const ORIGIN = 'http://localhost:3000';
 const OLD_PASSWORD = 'Phase10-old-password!';
@@ -17,6 +22,12 @@ type JsonBody = {
   error?: { code?: string; message?: string };
 };
 
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
 describe('Phase 10 account lifecycle (HTTP integration)', () => {
   const runId = randomUUID().replace(/-/g, '');
   const emailPrefix = `phase10-${runId}`;
@@ -24,6 +35,7 @@ describe('Phase 10 account lifecycle (HTTP integration)', () => {
   const ingredientIds: string[] = [];
   let app: INestApplication;
   let prisma: PrismaService;
+  let lifecycleLock: AccountLifecycleLockService;
   let base: string;
 
   async function request(
@@ -74,7 +86,7 @@ describe('Phase 10 account lifecycle (HTTP integration)', () => {
   async function latestMail(email: string, type: 'email_verification' | 'password_reset') {
     const response = await request(
       `/dev/mail-outbox/latest?email=${encodeURIComponent(email)}&type=${type}`,
-      { origin: null },
+      { origin: null, headers: { 'X-Dev-Mail-Outbox-Key': 'test-only-outbox-key' } },
     );
     expect(response.status).toBe(200);
     return (await json(response)).data as { token: string; url: string; type: string; email: string };
@@ -86,11 +98,13 @@ describe('Phase 10 account lifecycle (HTTP integration)', () => {
     configureHttp(app, config);
     await app.listen(0, '127.0.0.1');
     prisma = app.get(PrismaService);
+    lifecycleLock = app.get(AccountLifecycleLockService);
     const address = app.getHttpServer().address() as { port: number };
     base = `http://127.0.0.1:${address.port}/v1`;
   });
 
   afterAll(async () => {
+    lifecycleLock.setTestHook(null);
     const credentials = await prisma.userCredential.findMany({
       where: { normalizedEmail: { startsWith: emailPrefix } },
       select: { userId: true },
@@ -100,6 +114,8 @@ describe('Phase 10 account lifecycle (HTTP integration)', () => {
     await prisma.ingredient.deleteMany({ where: { id: { in: ingredientIds } } });
     await app.close();
   });
+
+  afterEach(() => lifecycleLock.setTestHook(null));
 
   it('hashes, expires, reissues, and consumes email verification tokens once', async () => {
     const account = await register('verify');
@@ -213,6 +229,140 @@ describe('Phase 10 account lifecycle (HTTP integration)', () => {
     expect((await request('/auth/password-reset/confirm', {
       method: 'POST', body: JSON.stringify({ token: usable.token, newPassword: OLD_PASSWORD }),
     })).status).toBe(400);
+  });
+
+  it('serializes an old-password login with password reset under a controlled barrier', async () => {
+    const account = await register('reset-race');
+    await request('/auth/password-reset/request', {
+      method: 'POST', body: JSON.stringify({ email: account.email }),
+    });
+    const resetMail = await latestMail(account.email, 'password_reset');
+    const loginHasLock = deferred();
+    const releaseLogin = deferred();
+    const resetReachedLock = deferred();
+
+    lifecycleLock.setTestHook(async (
+      phase: AccountLifecycleLockPhase,
+      operation: AccountLifecycleLockOperation,
+      userId: string,
+    ) => {
+      if (userId !== account.userId) return;
+      if (phase === 'acquired' && operation === 'login') {
+        loginHasLock.resolve();
+        await releaseLogin.promise;
+      }
+      if (phase === 'before_acquire' && operation === 'password_reset_confirm') {
+        resetReachedLock.resolve();
+      }
+    });
+
+    const racingLoginPromise = login(account.email, OLD_PASSWORD);
+    await loginHasLock.promise;
+    const resetPromise = request('/auth/password-reset/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ token: resetMail.token, newPassword: NEW_PASSWORD }),
+    });
+    await resetReachedLock.promise;
+    releaseLogin.resolve();
+
+    const [racingLogin, reset] = await Promise.all([racingLoginPromise, resetPromise]);
+    lifecycleLock.setTestHook(null);
+    expect(racingLogin.status).toBe(200);
+    expect(reset.status).toBe(200);
+    const racingCookie = cookieFrom(racingLogin);
+    expect((await request('/me', { cookie: racingCookie })).status).toBe(401);
+    expect((await login(account.email, OLD_PASSWORD)).status).toBe(401);
+    expect((await login(account.email, NEW_PASSWORD)).status).toBe(200);
+    expect(await prisma.authSession.count({
+      where: { userId: account.userId, revokedAt: null },
+    })).toBe(1);
+  });
+
+  it('serializes an old-password login with password change under a controlled barrier', async () => {
+    const account = await register('change-race');
+    const loginHasLock = deferred();
+    const releaseLogin = deferred();
+    const changeReachedLock = deferred();
+
+    lifecycleLock.setTestHook(async (
+      phase: AccountLifecycleLockPhase,
+      operation: AccountLifecycleLockOperation,
+      userId: string,
+    ) => {
+      if (userId !== account.userId) return;
+      if (phase === 'acquired' && operation === 'login') {
+        loginHasLock.resolve();
+        await releaseLogin.promise;
+      }
+      if (phase === 'before_acquire' && operation === 'password_change') {
+        changeReachedLock.resolve();
+      }
+    });
+
+    const racingLoginPromise = login(account.email, OLD_PASSWORD);
+    await loginHasLock.promise;
+    const changePromise = request('/me/password', {
+      method: 'POST',
+      cookie: account.cookie,
+      body: JSON.stringify({ currentPassword: OLD_PASSWORD, newPassword: NEW_PASSWORD }),
+    });
+    await changeReachedLock.promise;
+    releaseLogin.resolve();
+
+    const [racingLogin, change] = await Promise.all([racingLoginPromise, changePromise]);
+    lifecycleLock.setTestHook(null);
+    expect(racingLogin.status).toBe(200);
+    expect(change.status).toBe(200);
+    expect((await request('/me', { cookie: cookieFrom(racingLogin) })).status).toBe(401);
+    expect((await request('/me', { cookie: account.cookie })).status).toBe(200);
+    expect((await login(account.email, OLD_PASSWORD)).status).toBe(401);
+    expect((await login(account.email, NEW_PASSWORD)).status).toBe(200);
+    expect(await prisma.authSession.count({
+      where: {
+        userId: account.userId,
+        revokedAt: null,
+        tokenHash: { not: hashSessionToken(rawTokenFromCookie(account.cookie)) },
+      },
+    })).toBe(1);
+  });
+
+  it('prevents session creation after concurrent account deletion', async () => {
+    const account = await register('delete-race');
+    const deletionHasLock = deferred();
+    const releaseDeletion = deferred();
+    const loginReachedLock = deferred();
+
+    lifecycleLock.setTestHook(async (
+      phase: AccountLifecycleLockPhase,
+      operation: AccountLifecycleLockOperation,
+      userId: string,
+    ) => {
+      if (userId !== account.userId) return;
+      if (phase === 'acquired' && operation === 'account_delete') {
+        deletionHasLock.resolve();
+        await releaseDeletion.promise;
+      }
+      if (phase === 'before_acquire' && operation === 'login') {
+        loginReachedLock.resolve();
+      }
+    });
+
+    const deletionPromise = request('/me/account', {
+      method: 'DELETE',
+      cookie: account.cookie,
+      body: JSON.stringify({ password: OLD_PASSWORD, confirm: 'DELETE' }),
+    });
+    await deletionHasLock.promise;
+    const racingLoginPromise = login(account.email, OLD_PASSWORD);
+    await loginReachedLock.promise;
+    releaseDeletion.resolve();
+
+    const [deletion, racingLogin] = await Promise.all([deletionPromise, racingLoginPromise]);
+    lifecycleLock.setTestHook(null);
+    expect(deletion.status).toBe(200);
+    expect(racingLogin.status).toBe(401);
+    expect(await prisma.user.count({ where: { id: account.userId } })).toBe(0);
+    expect(await prisma.authSession.count({ where: { userId: account.userId } })).toBe(0);
   });
 
   it('lists only safe owned session metadata, enforces ownership, and changes passwords safely', async () => {

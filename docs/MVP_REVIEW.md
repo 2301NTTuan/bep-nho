@@ -122,3 +122,13 @@ Do not begin Phase 11, social, pantry, household, meal-planning, or monetization
 - Production mail misconfiguration fails during environment validation while transient delivery failures keep the generic enumeration-safe response and bounded log warning.
 - Development raw-token retrieval requires `X-Dev-Mail-Outbox-Key`; missing/wrong keys return 404, correct test-only keys work, and production has no route.
 - No migration was added: 9 migrations and Prisma 6.19.3 remain fixed. Local gates passed with API 13 suites/68 tests and Playwright/axe 3/3; remote run #22 passed `static`, `integration`, and `e2e` on the exact implementation SHA.
+
+## Phase 11 controlled editorial workflow completed
+
+- Canonical recipe authoring now has an authoritative database role boundary, dry-run-first operational grant/revoke command, separate optimistic JSON drafts, and a usable admin application on port 3002.
+- Publication is a single per-recipe locked transaction that validates effective content and creates a new immutable RecipeVersion with ordered ingredients, steps, optional Taste rules, media, and nullable publisher provenance. Stale drafts and identical content return 409; the existing 13 seeded recipes are not rewritten.
+- Archive/restore preserves every historical canonical/personalized version, CookSession snapshot, feedback, and Taste signal. Public reads and all new cooking/personalization entry points honor current status under the same advisory lock.
+- Recipe images use private S3-compatible storage. Actual JPEG/PNG/WebP bytes are decoded and normalized to metadata-stripped WebP with generated immutable keys. The API serves active assets with immutable caching and isolates storage failures from core readiness.
+- The public web renders versioned hero images with meaningful alt text and retains its existing clean fallback. Admin pages cover login, listing, creation, full ingredient/step/Taste-rule editing, media upload/preview, validation, publish confirmation, and archive/restore.
+- Migration `20261010100000_admin_recipe_publishing_media` is the additive migration #10. Prisma remains exactly 6.19.3. CI provisions disposable MinIO only for integration/E2E; browser coverage exercises the complete V1/V2/media/archive/restore flow and axe serious/critical checks.
+- Still out of scope: Family Taste/households, pantry, shopping, meal planning, social/community publishing, monetization, MFA/social login, bulk imports, automated culinary approval, and a general file manager or CDN transformation platform.

@@ -1,6 +1,6 @@
 # Bếp Nhớ operations runbook
 
-This runbook covers the current modular-monolith alpha: a Next.js web process, a NestJS API process, PostgreSQL, and Redis. MinIO remains in the local compose file but is not used by current product requests and is not a readiness dependency.
+This runbook covers the current modular-monolith alpha: public and admin Next.js processes, a NestJS API process, PostgreSQL, Redis, and S3-compatible editorial media storage. Object storage is used by media operations but remains outside global readiness so text and cooking flows stay available during a storage outage.
 
 ## Required configuration
 
@@ -31,12 +31,16 @@ Keep secrets in the deployment secret store, never in Git or `.env.example`.
 | `MAIL_SMTP_HOST`, `MAIL_SMTP_PORT`, `MAIL_SMTP_SECURE` | Provider-neutral SMTP connection settings. |
 | `MAIL_SMTP_USERNAME`, `MAIL_SMTP_PASSWORD` | Optional only for an intentional unauthenticated relay; configure both or neither and store them only in the deployment secret store. |
 | `DEV_MAIL_OUTBOX_KEY` | Non-production-only key for raw memory-outbox inspection. Use a fake local/test value; never configure or expose the dev route in production. |
+| `S3_ENDPOINT`, `S3_REGION` | Endpoint and signing region for the operator-provided S3-compatible service. |
+| `S3_ACCESS_KEY`, `S3_SECRET_KEY` | Storage credentials; keep them only in the deployment secret store. |
+| `S3_BUCKET` | Private bucket containing immutable normalized recipe media. |
+| `S3_FORCE_PATH_STYLE` | `true` for local MinIO and providers requiring path-style addressing; otherwise provider-specific. |
 
 If the API is directly internet-facing, keep `TRUST_PROXY_HOPS=0`. Set it to `1` only when exactly one controlled reverse proxy is in front of the API; adjust it only to match a known topology. A wrong value can let clients influence the IP used for abuse protection.
 
 ## Initial startup
 
-1. Provision PostgreSQL and Redis and verify they accept connections.
+1. Provision PostgreSQL, Redis, and the private S3-compatible bucket and verify they accept connections.
 2. Install the immutable dependency set with `corepack enable` and `pnpm install --frozen-lockfile` using Node 24 and pnpm 10.34.6.
 3. Validate the schema with `pnpm db:validate`.
 4. Apply committed migrations with:
@@ -45,10 +49,27 @@ If the API is directly internet-facing, keep `TRUST_PROXY_HOPS=0`. Set it to `1`
    pnpm --filter @bep-nho/database exec prisma migrate deploy --schema prisma/schema.prisma
    ```
 
-5. Build with `pnpm build` and start the API and web processes through the configured process supervisor.
+5. Build with `pnpm build` and start the API, public web, and admin web processes through the configured process supervisor.
 6. Require `GET /v1/health/live` and `GET /v1/health/ready` to return 200 before routing traffic.
 
 The alpha seed is deterministic and refuses to rewrite versioned content, but it is a content-bootstrap tool rather than a production release migration. Run `pnpm --filter @bep-nho/database db:seed` only for a new environment where the 13 reviewed-for-alpha fixtures are intentionally wanted. Never use a seed as an ad-hoc production content editor.
+
+For local development/CI only, `pnpm storage:ensure` checks the configured bucket and creates it if missing. It refuses creation in production. Production provisioning belongs to infrastructure automation, not API startup.
+
+## Admin publishing and media operations
+
+Use the dry-run-first role procedure and editorial lifecycle in `docs/ADMIN.md`. Role changes are effective on the next request because admin authorization always consults PostgreSQL. There is no role-management HTTP endpoint.
+
+Published recipe versions and their child rows are immutable. Publication is forward-only: a content change creates a new version under the shared per-recipe advisory lock. Archive/restore only changes recipe status. Never repair content by updating a published RecipeVersion or media object in place.
+
+Media storage is private. `GET /v1/media/:id` is the controlled delivery path. A media 503 does not imply PostgreSQL/Redis readiness should fail. Diagnose with provider health and a non-production bucket check, without printing credentials:
+
+```bash
+pnpm storage:ensure
+curl -fsS http://localhost:3001/v1/media/KNOWN_ACTIVE_MEDIA_UUID -o /dev/null
+```
+
+Check endpoint/DNS/TLS, region, bucket existence, path-style policy, IAM permissions for get/put/delete, and object presence. Never log signed headers, credentials, or image bytes. A missing active object is an operational inconsistency and currently returns 503; restore the immutable object from the verified storage backup rather than uploading different bytes at the same key.
 
 ## Health, logs, metrics, and contract
 
@@ -167,6 +188,9 @@ For a bad database migration, prefer a reviewed forward-fix migration. If incide
 - **Browser mutation 403:** compare the browser `Origin` exactly with `CORS_ORIGIN`; do not add a wildcard.
 - **Unexpected shared rate limits:** verify proxy topology and `TRUST_PROXY_HOPS`, then inspect the deployment-specific Redis prefix.
 - **Lifecycle email not received:** verify `MAIL_TRANSPORT=smtp`, sender/SMTP configuration, paired credentials, `PUBLIC_WEB_URL`, provider delivery logs, and SPF/DKIM/DMARC. Never switch production to the memory outbox.
+- **Media upload/read 503:** verify the S3 endpoint, region, path-style setting, private bucket, credentials, permissions, and object presence. Core readiness may remain 200 by design.
+- **Admin request 403:** verify the account is active and inspect the dry-run `pnpm admin:role` result. Do not add a public grant endpoint or trust a role sent by the browser.
+- **Draft publish 409:** distinguish stale revision/base version from `NO_EFFECTIVE_CHANGE`; reload/create a fresh draft rather than changing immutable published rows.
 - **Development outbox returns 404:** confirm the API is non-production, memory delivery is selected, `DEV_MAIL_OUTBOX_KEY` is set to a 16–128 character fake development value, and the same value is sent only in `X-Dev-Mail-Outbox-Key`.
 - **401 on protected routes:** verify cookie domain/HTTPS/Secure behavior and session expiry/revocation; never log the cookie.
 - **OpenAPI drift:** run `pnpm openapi:generate`, review the semantic change, then commit the regenerated artifact. Do not hand-edit the JSON.

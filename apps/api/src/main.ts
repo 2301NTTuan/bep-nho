@@ -4,13 +4,14 @@ import { AppModule } from './app.module';
 import { configureHttp } from './http/configure-http';
 
 async function bootstrap(): Promise<void> {
-  const app =
-    await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: process.env.NODE_ENV === 'production',
+  });
 
   const config =
     app.get(ConfigService);
 
-  configureHttp(app, config);
+  const logger = configureHttp(app, config);
 
   app.enableShutdownHooks();
 
@@ -19,9 +20,12 @@ async function bootstrap(): Promise<void> {
 
   await app.listen(port, '0.0.0.0');
 
-  console.log(
-    `Bep Nho API listening on http://localhost:${port}/v1`,
-  );
+  const environment = config.get<string>('NODE_ENV', 'development');
+  if (environment === 'production') {
+    logger.info({ port, environment }, 'Bep Nho API listening');
+  } else {
+    console.log(`Bep Nho API listening on http://localhost:${port}/v1`);
+  }
 }
 
 void bootstrap();

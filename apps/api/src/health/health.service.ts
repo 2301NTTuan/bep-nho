@@ -71,53 +71,16 @@ export class HealthService {
     }
   }
 
-  private async checkObjectStorage(): Promise<CheckState> {
-    const start = Date.now();
-
-    try {
-      const endpoint =
-        this.config
-          .getOrThrow<string>('S3_ENDPOINT')
-          .replace(/\/+$/, '');
-
-      const response = await fetch(
-        `${endpoint}/minio/health/live`,
-        {
-          signal: AbortSignal.timeout(1500),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `Object storage health returned HTTP ${response.status}`,
-        );
-      }
-
-      return {
-        status: 'ok',
-        latencyMs: Date.now() - start,
-      };
-    } catch (error) {
-      return {
-        status: 'error',
-        latencyMs: Date.now() - start,
-        error: error instanceof Error ? error.message : 'unknown error',
-      };
-    }
-  }
-
   async readiness() {
-    const [database, redis, objectStorage] =
+    const [database, redis] =
       await Promise.all([
         this.checkDatabase(),
         this.checkRedis(),
-        this.checkObjectStorage(),
       ]);
 
     const healthy =
       database.status === 'ok' &&
-      redis.status === 'ok' &&
-      objectStorage.status === 'ok';
+      redis.status === 'ok';
 
     return {
       status: healthy ? 'ok' : 'degraded',
@@ -127,7 +90,6 @@ export class HealthService {
       dependencies: {
         database,
         redis,
-        objectStorage,
       },
     };
   }

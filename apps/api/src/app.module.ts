@@ -11,6 +11,7 @@ import { FeedbackModule } from './feedback/feedback.module';
 import { PersonalizationModule } from './personalization/personalization.module';
 import { DevModule } from './dev/dev.module';
 import { OriginGuard } from './http/origin.guard';
+import { ObservabilityModule } from './observability/observability.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { OriginGuard } from './http/origin.guard';
     }),
 
     DatabaseModule,
+    ObservabilityModule,
     AuthModule,
     HealthModule,
     RecipesModule,

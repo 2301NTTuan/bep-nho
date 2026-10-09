@@ -1,13 +1,13 @@
-import { randomUUID } from 'node:crypto';
 import {
   ArgumentsHost,
   Catch,
   ExceptionFilter,
   HttpException,
   HttpStatus,
-  Logger,
 } from '@nestjs/common';
 import type { ApiErrorEnvelope } from '@bep-nho/contracts';
+import type { Logger } from 'pino';
+import { resolveRequestId, type RequestWithId } from './request-id';
 
 const ERROR_CODES: Partial<Record<number, string>> = {
   400: 'VALIDATION_ERROR',
@@ -21,11 +21,11 @@ const ERROR_CODES: Partial<Record<number, string>> = {
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
-  private readonly logger = new Logger(ApiExceptionFilter.name);
+  constructor(private readonly logger?: Logger) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const context = host.switchToHttp();
-    const request = context.getRequest<{ headers: Record<string, string | string[] | undefined> }>();
+    const request = context.getRequest<RequestWithId>();
     const response = context.getResponse<{
       setHeader(name: string, value: string): void;
       status(code: number): { json(body: ApiErrorEnvelope): void };
@@ -49,11 +49,13 @@ export class ApiExceptionFilter implements ExceptionFilter {
           : exceptionMessage ?? (exception instanceof Error
             ? exception.message
             : 'Request failed.');
-    const incomingId = request.headers['x-request-id'];
-    const requestId = (Array.isArray(incomingId) ? incomingId[0] : incomingId) || randomUUID();
+    const requestId = resolveRequestId(request);
 
     if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
-      this.logger.error(exception instanceof Error ? exception.stack : exception);
+      this.logger?.error(
+        { requestId, err: exception instanceof Error ? exception : undefined },
+        'Unhandled HTTP exception',
+      );
     }
 
     response.setHeader('X-Request-ID', requestId);

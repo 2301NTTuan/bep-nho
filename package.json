@@ -15,14 +15,28 @@
     "db:validate": "dotenv -e .env -- pnpm --filter @bep-nho/database exec prisma validate --schema prisma/schema.prisma",
     "db:migrate": "pnpm --filter @bep-nho/database db:migrate",
     "api:build": "pnpm --filter @bep-nho/api build",
-    "api:dev": "pnpm --filter @bep-nho/api dev"
+    "api:dev": "pnpm --filter @bep-nho/api dev",
+    "openapi:generate": "pnpm --filter @bep-nho/api build && node apps/api/dist/openapi/generate.js",
+    "openapi:check": "pnpm openapi:generate && git diff --exit-code -- docs/openapi/openapi.json",
+    "e2e": "dotenv -e .env -- playwright test",
+    "e2e:a11y": "dotenv -e .env -- playwright test --grep @a11y",
+    "sessions:cleanup": "node scripts/ops/cleanup-sessions.mjs"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.64.0",
+    "@prisma/client": "6.19.3",
     "dotenv-cli": "^8.0.0",
     "turbo": "^2.0.0",
     "typescript": "^5.6.0"
   },
   "pnpm": {
+    "overrides": {
+      "js-yaml@4.1.0": "4.3.2",
+      "lodash@4.17.21": "4.18.1",
+      "multer@2.0.2": "2.4.0",
+      "postcss@8.4.31": "8.5.29"
+    },
     "onlyBuiltDependencies": [
       "@nestjs/core",
       "@prisma/client",

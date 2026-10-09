@@ -8,6 +8,7 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
+import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/current-user.decorator';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
@@ -17,7 +18,10 @@ import {
 } from './personalization.service';
 import { PinBestVersionDto } from './dto/pin-best-version.dto';
 import { ReviewAdjustmentDto } from './dto/review-adjustment.dto';
+import { ApiSessionProtected, ApiStandardErrors } from '../openapi/decorators';
 
+@ApiTags('Personalization')
+@ApiSessionProtected()
 @Controller(
   'me/recipes/:slug/personalized-versions',
 )
@@ -29,6 +33,9 @@ export class PersonalizationController {
   ) {}
 
   @Post()
+  @ApiOperation({ summary: 'Create or reuse a Taste-engine personalized version.' })
+  @ApiResponse({ status: 201, description: 'Personalized version.' })
+  @ApiStandardErrors(404, 409, 422)
   create(
     @CurrentUser()
     identity: AuthenticatedIdentity,
@@ -44,6 +51,9 @@ export class PersonalizationController {
   }
 
   @Get('latest')
+  @ApiOperation({ summary: 'Get the latest personalized version of any origin.' })
+  @ApiResponse({ status: 200, description: 'Latest personalized version.' })
+  @ApiResponse({ status: 404, description: 'No personalized version.' })
   latest(
     @CurrentUser()
     identity: AuthenticatedIdentity,
@@ -58,6 +68,8 @@ export class PersonalizationController {
   }
 
   @Get('overview')
+  @ApiOperation({ summary: 'Get latest engine, latest-any, and pinned best versions.' })
+  @ApiResponse({ status: 200, description: 'Personalization overview.' })
   overview(
     @CurrentUser() identity: AuthenticatedIdentity,
     @Param('slug') slug: string,
@@ -66,6 +78,9 @@ export class PersonalizationController {
   }
 
   @Put('best')
+  @ApiOperation({ summary: 'Pin an owned version as My Best Version.' })
+  @ApiResponse({ status: 200, description: 'Updated personalization overview.' })
+  @ApiStandardErrors(400, 404)
   pinBest(
     @CurrentUser() identity: AuthenticatedIdentity,
     @Param('slug') slug: string,
@@ -75,6 +90,8 @@ export class PersonalizationController {
   }
 
   @Delete('best')
+  @ApiOperation({ summary: 'Remove the My Best Version pin.' })
+  @ApiResponse({ status: 200, description: 'Updated personalization overview.' })
   unpinBest(
     @CurrentUser() identity: AuthenticatedIdentity,
     @Param('slug') slug: string,
@@ -83,6 +100,10 @@ export class PersonalizationController {
   }
 
   @Get(':versionId/decisions')
+  @ApiOperation({ summary: 'List append-only decisions for an owned source version.' })
+  @ApiParam({ name: 'versionId', format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Adjustment decisions.' })
+  @ApiResponse({ status: 404, description: 'Version not found for current user/recipe.' })
   decisions(
     @CurrentUser() identity: AuthenticatedIdentity,
     @Param('slug') slug: string,
@@ -92,6 +113,11 @@ export class PersonalizationController {
   }
 
   @Post(':versionId/adjustments/:ingredientSlug/decisions')
+  @ApiOperation({ summary: 'Accept, reject, or edit an adjustment on the active source version.' })
+  @ApiParam({ name: 'versionId', format: 'uuid' })
+  @ApiParam({ name: 'ingredientSlug' })
+  @ApiResponse({ status: 201, description: 'Recorded decision and optional result version.' })
+  @ApiStandardErrors(400, 404, 409, 422)
   decide(
     @CurrentUser() identity: AuthenticatedIdentity,
     @Param('slug') slug: string,

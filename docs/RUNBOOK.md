@@ -16,6 +16,8 @@ Keep secrets in the deployment secret store, never in Git or `.env.example`.
 | `NEXT_PUBLIC_API_BASE_URL` | Browser-visible API base, normally `https://api.example/v1`. It is embedded at web build time. |
 | `AUTH_RATE_LIMIT_LOGIN_POINTS` | Login attempts per IP/window; safe default `10`. |
 | `AUTH_RATE_LIMIT_REGISTER_POINTS` | Registration attempts per IP/window; safe default `5`. |
+| `AUTH_RATE_LIMIT_LIFECYCLE_REQUEST_POINTS` | Verification/reset email requests per endpoint and IP/window; safe default `5`. |
+| `AUTH_RATE_LIMIT_LIFECYCLE_CONFIRM_POINTS` | Verification/reset confirmation attempts per endpoint and IP/window; safe default `10`. |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | Rate-limit window; safe default `60`. |
 | `AUTH_RATE_LIMIT_KEY_PREFIX` | Redis key namespace; use a deployment-specific value. |
 | `TRUST_PROXY_HOPS` | Number of trusted reverse-proxy hops. Default `0` ignores arbitrary forwarded IPs. |
@@ -23,6 +25,11 @@ Keep secrets in the deployment secret store, never in Git or `.env.example`.
 | `OPENAPI_ENABLED` | Expose machine-readable `GET /v1/openapi.json`; defaults enabled. |
 | `METRICS_ENABLED` | Expose Prometheus `GET /metrics`; defaults enabled. Restrict it at the network edge. |
 | `SESSION_RETENTION_DAYS` | Default retention for the explicit session cleanup command; defaults to `30`. |
+| `PUBLIC_WEB_URL` | Public web origin used to construct verification/reset links, for example `https://app.example`. |
+| `MAIL_TRANSPORT` | Use `smtp` outside local/test work. `memory` is rejected at delivery time in production; `disabled` accepts no delivery. |
+| `MAIL_FROM` | Verified sender address for lifecycle email. |
+| `MAIL_SMTP_HOST`, `MAIL_SMTP_PORT`, `MAIL_SMTP_SECURE` | Provider-neutral SMTP connection settings. |
+| `MAIL_SMTP_USERNAME`, `MAIL_SMTP_PASSWORD` | Optional SMTP credentials; store them only in the deployment secret store. |
 
 If the API is directly internet-facing, keep `TRUST_PROXY_HOPS=0`. Set it to `1` only when exactly one controlled reverse proxy is in front of the API; adjust it only to match a known topology. A wrong value can let clients influence the IP used for abuse protection.
 
@@ -63,7 +70,19 @@ curl -fsS https://api.example/metrics | head
 
 Sessions use an opaque `HttpOnly`, `SameSite=Lax`, `Secure` production cookie; only its hash is stored. Stateful browser requests also require an allowed exact `Origin`. A missing or foreign Origin returning 403 is expected, not a CORS failure to bypass.
 
-Login and registration have independent Redis-backed, per-IP buckets. Rejection is generic, returns 429 with `Retry-After`, and does not disclose account existence. If Redis cannot be used, these protected endpoints fail closed with 503; ordinary recipe reads remain available. Investigate Redis connectivity rather than disabling the guard.
+Login, registration, verification request/confirmation, and reset request/confirmation have independent Redis-backed, per-IP buckets. Rejection is generic, returns 429 with `Retry-After`, and does not disclose account existence. If Redis cannot be used, these protected endpoints fail closed with 503; ordinary recipe reads remain available. Investigate Redis connectivity rather than disabling the guard.
+
+Verification and password-reset request endpoints always return the same accepted response for known and unknown emails. Raw tokens are 256-bit random values and only SHA-256 hashes are stored. Verification tokens expire after 24 hours; reset tokens expire after one hour. Reissue invalidates an older unused token. A successful reset revokes every session and requires a new login. An authenticated password change keeps the current session but revokes every other session.
+
+`GET /v1/me/sessions` exposes only timestamps, an opaque database ID, and whether a row is current. It intentionally stores/returns no IP, user-agent, or device fingerprint. `lastUsedAt` writes at most once per five minutes. Foreign session IDs return 404. Use the account page or owner-scoped API to revoke one/all-other sessions; never manipulate token hashes manually.
+
+Account deletion requires the current password plus exact `DELETE`. It transactionally deletes the user and all user-owned auth, Cook, Taste, and personalized data, then clears the cookie. Canonical Recipe/RecipeVersion content remains. Historical immutability applies to ordinary product edits; it does not override an explicit account deletion request.
+
+## Lifecycle email delivery
+
+Production deployments must set `MAIL_TRANSPORT=smtp`, a verified `MAIL_FROM`, `PUBLIC_WEB_URL`, and valid SMTP connection settings before admitting alpha users. Test the sender domain's SPF/DKIM/DMARC policy, delivery, expiry, one-time consumption, and links through the public TLS ingress. Delivery errors are logged only as bounded lifecycle failures; never add email addresses or raw/hash tokens to logs.
+
+`MAIL_TRANSPORT=memory` is solely for development and automated tests. The bounded outbox can be read through `/v1/dev/mail-outbox/latest` only when the non-production DevModule exists. Production excludes that module and route from routing and OpenAPI, and the mail service refuses memory delivery under `NODE_ENV=production`. Never expose or proxy a dev route in a real environment.
 
 Expired/revoked sessions are removed only by explicit maintenance. Preview first:
 
@@ -125,9 +144,10 @@ The restore script refuses the current `DATABASE_URL`, a target named `bep_nho`,
 5. Run `prisma migrate deploy` as shown above. Never run `prisma migrate reset` in a shared or production environment, and never rewrite applied migration history.
 6. Build/start API and web with the release configuration.
 7. Wait for readiness 200 before sending traffic.
-8. Smoke register/login/logout using a designated non-production-data account.
-9. Smoke public recipe detail plus one recipe/cook path without leaving unwanted data.
-10. Monitor 5xx/429 rate, readiness, latency, and structured error logs through the stabilization window.
+8. Smoke register/login/logout and verify one designated non-production-data account through the configured SMTP path.
+9. Smoke password reset and confirm every old session is revoked; remove the disposable account through the deliberate deletion flow.
+10. Smoke public recipe detail plus one recipe/cook path without leaving unwanted data.
+11. Monitor 5xx/429 rate, readiness, mail-delivery failures, latency, and structured error logs through the stabilization window.
 
 Before any risky migration, take and verify a backup. Prisma migrations are forward-only in the current operating model.
 
@@ -143,6 +163,7 @@ For a bad database migration, prefer a reviewed forward-fix migration. If incide
 - **Readiness 503, Redis false:** check Redis reachability and auth. Login/register will fail closed; recipe reads need not.
 - **Browser mutation 403:** compare the browser `Origin` exactly with `CORS_ORIGIN`; do not add a wildcard.
 - **Unexpected shared rate limits:** verify proxy topology and `TRUST_PROXY_HOPS`, then inspect the deployment-specific Redis prefix.
+- **Lifecycle email not received:** verify `MAIL_TRANSPORT=smtp`, sender/SMTP secrets, `PUBLIC_WEB_URL`, provider delivery logs, and SPF/DKIM/DMARC. Never switch production to the memory outbox.
 - **401 on protected routes:** verify cookie domain/HTTPS/Secure behavior and session expiry/revocation; never log the cookie.
 - **OpenAPI drift:** run `pnpm openapi:generate`, review the semantic change, then commit the regenerated artifact. Do not hand-edit the JSON.
 - **Restore/client mismatch:** install matching PostgreSQL client tools and create a fresh verified dump; do not bypass the check casually.
@@ -151,6 +172,7 @@ For a bad database migration, prefer a reviewed forward-fix migration. If incide
 ## Prohibited shortcuts
 
 - Do not commit real credentials, cookies, tokens, `.env` files, or database dumps.
+- Do not expose the development mail outbox or enable its raw-token transport in production.
 - Do not use wildcard credentialed CORS or blindly trust `X-Forwarded-For`.
 - Do not disable Origin protection or rate limiting to make a smoke test pass.
 - Do not rewrite applied migrations, run `prisma migrate reset`, or restore over the live database.

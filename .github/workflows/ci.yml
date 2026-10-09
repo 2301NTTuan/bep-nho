@@ -37,6 +37,7 @@ jobs:
           key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-pnpm-
       - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
       - run: pnpm db:validate
       - run: pnpm typecheck
       - run: pnpm openapi:check
@@ -80,6 +81,7 @@ jobs:
           key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-pnpm-
       - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
       - name: Deploy migrations
         run: pnpm --filter @bep-nho/database exec prisma migrate deploy --schema prisma/schema.prisma
       - run: pnpm test
@@ -116,6 +118,7 @@ jobs:
           key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-pnpm-
       - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
       - name: Deploy migrations and deterministic alpha seed
         run: |
           pnpm --filter @bep-nho/database exec prisma migrate deploy --schema prisma/schema.prisma

@@ -27,7 +27,8 @@
     "MAIL_SMTP_PORT",
     "MAIL_SMTP_SECURE",
     "MAIL_SMTP_USERNAME",
-    "MAIL_SMTP_PASSWORD"
+    "MAIL_SMTP_PASSWORD",
+    "DEV_MAIL_OUTBOX_KEY"
   ],
   "tasks": {
     "dev": {"cache": false, "persistent": true},

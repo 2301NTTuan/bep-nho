@@ -33,6 +33,11 @@ describe('Phase 9 HTTP operational baseline', () => {
       'AUTH_RATE_LIMIT_WINDOW_SECONDS',
       'AUTH_RATE_LIMIT_KEY_PREFIX',
       'LOG_LEVEL',
+      'MAIL_TRANSPORT',
+      'MAIL_SMTP_HOST',
+      'MAIL_FROM',
+      'MAIL_SMTP_USERNAME',
+      'MAIL_SMTP_PASSWORD',
     ]) previousEnvironment[key] = process.env[key];
     process.env.NODE_ENV = 'production';
     process.env.AUTH_RATE_LIMIT_LOGIN_POINTS = '3';
@@ -40,6 +45,11 @@ describe('Phase 9 HTTP operational baseline', () => {
     process.env.AUTH_RATE_LIMIT_WINDOW_SECONDS = '30';
     process.env.AUTH_RATE_LIMIT_KEY_PREFIX = `phase9:http:${runId}`;
     process.env.LOG_LEVEL = 'silent';
+    process.env.MAIL_TRANSPORT = 'smtp';
+    process.env.MAIL_SMTP_HOST = '127.0.0.1';
+    process.env.MAIL_FROM = 'phase9@example.com';
+    process.env.MAIL_SMTP_USERNAME = '';
+    process.env.MAIL_SMTP_PASSWORD = '';
     const { AppModule } = await import('./app.module');
     app = await NestFactory.create(AppModule, { logger: false });
     configureHttp(app, app.get(ConfigService));
@@ -80,6 +90,12 @@ describe('Phase 9 HTTP operational baseline', () => {
     const metrics = await fetch(base.replace(/\/v1$/, '/metrics'));
     expect(metrics.status).toBe(200);
     expect(await metrics.text()).toContain('bep_nho_http_requests_total');
+
+    const devOutbox = await fetch(
+      `${base}/dev/mail-outbox/latest?email=test@example.com&type=email_verification`,
+      { headers: { 'X-Dev-Mail-Outbox-Key': 'must-not-enable-production-route' } },
+    );
+    expect(devOutbox.status).toBe(404);
   });
 
   it('reports live/ready semantics and keeps Origin enforcement intact', async () => {

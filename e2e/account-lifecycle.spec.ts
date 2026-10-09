@@ -11,6 +11,7 @@ const deleteEmail = `${emailPrefix}-delete@example.com`;
 const oldPassword = 'Phase10-browser-old!';
 const newPassword = 'Phase10-browser-new!';
 const prisma = new PrismaClient();
+const DEV_MAIL_OUTBOX_KEY = 'e2e-only-outbox-key';
 
 async function expectAccessible(page: Page): Promise<void> {
   const result = await new AxeBuilder({ page })
@@ -24,6 +25,7 @@ async function expectAccessible(page: Page): Promise<void> {
 async function latestMail(page: Page, targetEmail: string, type: 'email_verification' | 'password_reset') {
   const response = await page.request.get(
     `${API_BASE}/dev/mail-outbox/latest?email=${encodeURIComponent(targetEmail)}&type=${type}`,
+    { headers: { 'X-Dev-Mail-Outbox-Key': DEV_MAIL_OUTBOX_KEY } },
   );
   expect(response.status()).toBe(200);
   return (await response.json() as { data: { token: string; url: string } }).data;

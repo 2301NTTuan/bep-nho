@@ -24,7 +24,13 @@ export default defineConfig({
       url: 'http://127.0.0.1:3001/v1/health/ready',
       timeout: 120_000,
       reuseExistingServer: !process.env.CI,
-      env: { ...process.env, NODE_ENV: 'test', MAIL_TRANSPORT: 'memory', PORT: '3001' },
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        MAIL_TRANSPORT: 'memory',
+        DEV_MAIL_OUTBOX_KEY: 'e2e-only-outbox-key',
+        PORT: '3001',
+      },
     },
     {
       command: 'pnpm --filter @bep-nho/web start',

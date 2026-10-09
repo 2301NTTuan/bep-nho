@@ -7,3 +7,4 @@ process.env.AUTH_RATE_LIMIT_WINDOW_SECONDS ??= '60';
 process.env.AUTH_RATE_LIMIT_KEY_PREFIX ??= 'bep-nho:test';
 process.env.MAIL_TRANSPORT = 'memory';
 process.env.PUBLIC_WEB_URL ??= 'http://localhost:3000';
+process.env.DEV_MAIL_OUTBOX_KEY = 'test-only-outbox-key';

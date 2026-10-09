@@ -1,4 +1,14 @@
-import { BadRequestException, Controller, Get, NotFoundException, Post, Query, Res } from '@nestjs/common';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Headers,
+  NotFoundException,
+  Post,
+  Query,
+  Res,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from '../auth/auth.service';
 import type { CookieResponse } from '../auth/auth.types';
@@ -58,9 +68,12 @@ export class DevController {
   latestMail(
     @Query('email') email: string | undefined,
     @Query('type') type: string | undefined,
+    @Headers('x-dev-mail-outbox-key') providedKey: string | undefined,
   ) {
     const environment = this.config.get<string>('NODE_ENV', 'development');
     if (environment === 'production') throw new NotFoundException();
+    const expectedKey = this.config.get<string>('DEV_MAIL_OUTBOX_KEY', '');
+    if (!this.matchesOutboxKey(expectedKey, providedKey)) throw new NotFoundException();
     if (
       !email ||
       (type !== 'email_verification' && type !== 'password_reset')
@@ -70,5 +83,12 @@ export class DevController {
     const message = this.mailOutbox.latest(email, type as LifecycleMailType);
     if (!message) throw new NotFoundException('Development mail was not found.');
     return { data: message };
+  }
+
+  private matchesOutboxKey(expected: string, provided: string | undefined): boolean {
+    if (!expected || !provided) return false;
+    const expectedDigest = createHash('sha256').update(expected).digest();
+    const providedDigest = createHash('sha256').update(provided).digest();
+    return timingSafeEqual(expectedDigest, providedDigest);
   }
 }

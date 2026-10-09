@@ -22,6 +22,11 @@ async function generate(): Promise<void> {
   process.env.S3_SECRET_KEY ??= 'contract';
   process.env.S3_BUCKET ??= 'contract';
   process.env.CORS_ORIGIN ??= 'http://localhost:3000';
+  process.env.MAIL_TRANSPORT = 'smtp';
+  process.env.MAIL_SMTP_HOST = 'localhost';
+  process.env.MAIL_FROM = 'openapi@example.com';
+  process.env.MAIL_SMTP_USERNAME = '';
+  process.env.MAIL_SMTP_PASSWORD = '';
   const { AppModule } = await import('../app.module');
   const app = await NestFactory.create(AppModule, { logger: false });
   app.setGlobalPrefix('v1');

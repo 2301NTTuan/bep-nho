@@ -22,6 +22,7 @@ env:
   NEXT_PUBLIC_API_BASE_URL: http://localhost:3001/v1
   PUBLIC_WEB_URL: http://localhost:3000
   MAIL_TRANSPORT: memory
+  DEV_MAIL_OUTBOX_KEY: ci-only-outbox-key
 
 jobs:
   static:

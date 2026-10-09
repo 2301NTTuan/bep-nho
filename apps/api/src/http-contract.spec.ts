@@ -34,6 +34,20 @@ const mailOutbox = {
   latest: jest.fn().mockReturnValue(null),
 };
 
+const developmentConfig = {
+  get: (key: string, fallback?: unknown) => ({
+    NODE_ENV: 'development',
+    DEV_MAIL_OUTBOX_KEY: 'test-only-outbox-key',
+  } as Record<string, unknown>)[key] ?? fallback,
+};
+
+const productionConfig = {
+  get: (key: string, fallback?: unknown) => ({
+    NODE_ENV: 'production',
+    DEV_MAIL_OUTBOX_KEY: 'production-unused-key',
+  } as Record<string, unknown>)[key] ?? fallback,
+};
+
 function randomUuid() {
   return '00000000-0000-4000-8000-000000000001';
 }
@@ -45,7 +59,7 @@ function randomUuid() {
     { provide: AuthService, useValue: auth },
     { provide: SessionCookieService, useValue: cookies },
     { provide: DevelopmentMailOutbox, useValue: mailOutbox },
-    { provide: ConfigService, useValue: { get: () => 'development' } },
+    { provide: ConfigService, useValue: developmentConfig },
   ],
 })
 class DevelopmentDevModule {}
@@ -57,7 +71,7 @@ class DevelopmentDevModule {}
     { provide: AuthService, useValue: auth },
     { provide: SessionCookieService, useValue: cookies },
     { provide: DevelopmentMailOutbox, useValue: mailOutbox },
-    { provide: ConfigService, useValue: { get: () => 'production' } },
+    { provide: ConfigService, useValue: productionConfig },
   ],
 })
 class ProductionDevModule {}
@@ -99,6 +113,7 @@ describe('HTTP hardening behavior', () => {
   const apps: INestApplication[] = [];
   afterEach(async () => {
     await Promise.all(apps.splice(0).map((app) => app.close()));
+    mailOutbox.latest.mockReset().mockReturnValue(null);
   });
 
   it('serves development bootstrap in development', async () => {
@@ -136,10 +151,42 @@ describe('HTTP hardening behavior', () => {
     apps.push(server.app);
     const response = await fetch(
       `${server.base}/dev/mail-outbox/latest?email=test@example.com&type=email_verification`,
+      { headers: { 'X-Dev-Mail-Outbox-Key': 'production-unused-key' } },
     );
     expect(response.status).toBe(404);
     expect((await response.json()) as object).toMatchObject({
       error: { code: 'NOT_FOUND' },
+    });
+  });
+
+  it('hides the development mail outbox when its key is missing or wrong', async () => {
+    const server = await start(DevelopmentDevModule);
+    apps.push(server.app);
+    const url = `${server.base}/dev/mail-outbox/latest?email=test@example.com&type=email_verification`;
+    const missing = await fetch(url);
+    const wrong = await fetch(url, { headers: { 'X-Dev-Mail-Outbox-Key': 'wrong-outbox-key-value' } });
+    expect(missing.status).toBe(404);
+    expect(wrong.status).toBe(404);
+    expect(mailOutbox.latest).not.toHaveBeenCalled();
+  });
+
+  it('allows the configured key to read the development mail outbox', async () => {
+    mailOutbox.latest.mockReturnValue({
+      type: 'email_verification',
+      email: 'test@example.com',
+      token: 'raw-development-token',
+      url: 'http://localhost:3000/verify-email?token=raw-development-token',
+      createdAt: '2026-10-09T00:00:00.000Z',
+    });
+    const server = await start(DevelopmentDevModule);
+    apps.push(server.app);
+    const response = await fetch(
+      `${server.base}/dev/mail-outbox/latest?email=test@example.com&type=email_verification`,
+      { headers: { 'X-Dev-Mail-Outbox-Key': 'test-only-outbox-key' } },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      data: { email: 'test@example.com', token: 'raw-development-token' },
     });
   });
 

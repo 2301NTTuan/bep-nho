@@ -55,7 +55,7 @@ Completed 2026-10-09: deterministic OpenAPI generation/drift checks, production-
 
 ### Phase 10 — Account lifecycle and controlled-alpha readiness
 
-Completed 2026-10-09: hash-only expiring email-verification/password-reset tokens, enumeration-safe public requests, SMTP abstraction plus test/dev-only memory outbox, reset-all/change-other session policies, owner-scoped session management, transactional password-confirmed account deletion, account/recovery UI, OpenAPI, PostgreSQL integration coverage, and focused Playwright/axe flows. Implementation run #20 was green on its exact code SHA. A real SMTP provider and production infrastructure remain deployment prerequisites.
+Completed 2026-10-09: hash-only expiring email-verification/password-reset tokens, enumeration-safe public requests, SMTP abstraction plus a keyed test/dev-only memory outbox, reset-all/change-other session policies, owner-scoped session management, transactional password-confirmed account deletion, account/recovery UI, OpenAPI, PostgreSQL integration coverage, and focused Playwright/axe flows. Phase 10.1 additionally serializes login, registration, and dev-session creation against reset/change/delete; rejects unusable production SMTP configuration at startup; and requires a constant-time-compared outbox header. Implementation run #22 was green on exact SHA `595a4f313293d4d0316ee85fa96d03b494b5fe2e`. A real SMTP provider and production infrastructure remain deployment prerequisites.
 
 Do not begin Phase 11, social, pantry, household, meal-planning, or monetization domains automatically.
 
@@ -110,7 +110,15 @@ Do not begin Phase 11, social, pantry, household, meal-planning, or monetization
 
 - Registration creates an unverified credential and session without blocking the private cooking/Taste loop. `/v1/me` exposes email verification state and the UI offers a non-blocking resend path.
 - Verification and reset use random 256-bit bearer tokens with only SHA-256 hashes persisted. Reissue, expiry, one-time conditional consumption, account lifecycle locks, generic request responses, and independent Redis buckets are covered.
-- SMTP is the production-capable provider-neutral transport. The bounded raw-token outbox exists only in test/development, is absent from production routing/OpenAPI, and cannot run under `NODE_ENV=production`.
+- SMTP is the production-capable provider-neutral transport. Production startup rejects memory delivery, missing SMTP host/sender, or unpaired SMTP credentials. The bounded raw-token outbox exists only in test/development, requires the configured header key, is absent from production routing/OpenAPI, and cannot run under `NODE_ENV=production`.
 - Password reset revokes every session and requires login. Authenticated password change preserves only the current session. Session APIs expose timestamps/current state without tokens, hashes, IPs, user agents, or fingerprints.
 - Explicit account deletion requires password plus `DELETE`, runs transactionally, and removes all user-owned auth/Cook/Taste/personalization data while preserving canonical content and other users.
 - `/account`, `/forgot-password`, `/reset-password`, and `/verify-email` are covered by focused Chromium and axe checks. Remaining blockers are production SMTP/infrastructure, MFA, human content review, and the operational/security exercises listed above.
+
+## Phase 10.1 lifecycle safety completed
+
+- All `AuthSession` creation is inside a PostgreSQL transaction holding the same per-user advisory lock as password reset, password change, and account deletion. Login re-reads and verifies the credential only after acquiring that lock.
+- Controlled barrier tests prove reset/change revoke any racing old-password session, deletion prevents a post-delete session, and current/new-password sessions retain the documented behavior.
+- Production mail misconfiguration fails during environment validation while transient delivery failures keep the generic enumeration-safe response and bounded log warning.
+- Development raw-token retrieval requires `X-Dev-Mail-Outbox-Key`; missing/wrong keys return 404, correct test-only keys work, and production has no route.
+- No migration was added: 9 migrations and Prisma 6.19.3 remain fixed. Local gates passed with API 13 suites/68 tests and Playwright/axe 3/3; remote run #22 passed `static`, `integration`, and `e2e` on the exact implementation SHA.

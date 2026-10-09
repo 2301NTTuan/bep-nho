@@ -26,10 +26,11 @@ Keep secrets in the deployment secret store, never in Git or `.env.example`.
 | `METRICS_ENABLED` | Expose Prometheus `GET /metrics`; defaults enabled. Restrict it at the network edge. |
 | `SESSION_RETENTION_DAYS` | Default retention for the explicit session cleanup command; defaults to `30`. |
 | `PUBLIC_WEB_URL` | Public web origin used to construct verification/reset links, for example `https://app.example`. |
-| `MAIL_TRANSPORT` | Use `smtp` outside local/test work. `memory` is rejected at delivery time in production; `disabled` accepts no delivery. |
+| `MAIL_TRANSPORT` | Must be `smtp` in production; startup validation rejects `memory`. Development/test may use `memory` or a valid SMTP configuration. |
 | `MAIL_FROM` | Verified sender address for lifecycle email. |
 | `MAIL_SMTP_HOST`, `MAIL_SMTP_PORT`, `MAIL_SMTP_SECURE` | Provider-neutral SMTP connection settings. |
-| `MAIL_SMTP_USERNAME`, `MAIL_SMTP_PASSWORD` | Optional SMTP credentials; store them only in the deployment secret store. |
+| `MAIL_SMTP_USERNAME`, `MAIL_SMTP_PASSWORD` | Optional only for an intentional unauthenticated relay; configure both or neither and store them only in the deployment secret store. |
+| `DEV_MAIL_OUTBOX_KEY` | Non-production-only key for raw memory-outbox inspection. Use a fake local/test value; never configure or expose the dev route in production. |
 
 If the API is directly internet-facing, keep `TRUST_PROXY_HOPS=0`. Set it to `1` only when exactly one controlled reverse proxy is in front of the API; adjust it only to match a known topology. A wrong value can let clients influence the IP used for abuse protection.
 
@@ -74,15 +75,17 @@ Login, registration, verification request/confirmation, and reset request/confir
 
 Verification and password-reset request endpoints always return the same accepted response for known and unknown emails. Raw tokens are 256-bit random values and only SHA-256 hashes are stored. Verification tokens expire after 24 hours; reset tokens expire after one hour. Reissue invalidates an older unused token. A successful reset revokes every session and requires a new login. An authenticated password change keeps the current session but revokes every other session.
 
+Login, registration, and the non-production dev-session path create sessions only inside a transaction holding the same per-user lifecycle advisory lock as password reset, password change, and account deletion. Login re-reads the credential and verifies the password while holding that lock. Do not move password verification or session insertion outside this transaction: doing so can reintroduce an old-password session after credential rotation.
+
 `GET /v1/me/sessions` exposes only timestamps, an opaque database ID, and whether a row is current. It intentionally stores/returns no IP, user-agent, or device fingerprint. `lastUsedAt` writes at most once per five minutes. Foreign session IDs return 404. Use the account page or owner-scoped API to revoke one/all-other sessions; never manipulate token hashes manually.
 
 Account deletion requires the current password plus exact `DELETE`. It transactionally deletes the user and all user-owned auth, Cook, Taste, and personalized data, then clears the cookie. Canonical Recipe/RecipeVersion content remains. Historical immutability applies to ordinary product edits; it does not override an explicit account deletion request.
 
 ## Lifecycle email delivery
 
-Production deployments must set `MAIL_TRANSPORT=smtp`, a verified `MAIL_FROM`, `PUBLIC_WEB_URL`, and valid SMTP connection settings before admitting alpha users. Test the sender domain's SPF/DKIM/DMARC policy, delivery, expiry, one-time consumption, and links through the public TLS ingress. Delivery errors are logged only as bounded lifecycle failures; never add email addresses or raw/hash tokens to logs.
+Production deployments must set `MAIL_TRANSPORT=smtp`, a verified `MAIL_FROM`, `PUBLIC_WEB_URL`, and valid SMTP host/port settings before the API can start. SMTP username/password must be supplied together or both omitted for an intentional unauthenticated relay. Test the sender domain's SPF/DKIM/DMARC policy, delivery, expiry, one-time consumption, and links through the public TLS ingress. A transient delivery error keeps the generic accepted public response and is logged only as a bounded lifecycle failure; never add email addresses, SMTP credentials, raw/hash tokens, cookies, or outbox keys to logs.
 
-`MAIL_TRANSPORT=memory` is solely for development and automated tests. The bounded outbox can be read through `/v1/dev/mail-outbox/latest` only when the non-production DevModule exists. Production excludes that module and route from routing and OpenAPI, and the mail service refuses memory delivery under `NODE_ENV=production`. Never expose or proxy a dev route in a real environment.
+`MAIL_TRANSPORT=memory` is solely for development and automated tests. The bounded outbox can be read through `/v1/dev/mail-outbox/latest` only when the non-production DevModule exists and the request sends the configured `DEV_MAIL_OUTBOX_KEY` in `X-Dev-Mail-Outbox-Key`. Missing, unset, or wrong keys return 404. Production excludes that module and route from routing and OpenAPI, and startup validation rejects memory delivery under `NODE_ENV=production`. Never expose or proxy a dev route in a real environment.
 
 Expired/revoked sessions are removed only by explicit maintenance. Preview first:
 
@@ -163,7 +166,8 @@ For a bad database migration, prefer a reviewed forward-fix migration. If incide
 - **Readiness 503, Redis false:** check Redis reachability and auth. Login/register will fail closed; recipe reads need not.
 - **Browser mutation 403:** compare the browser `Origin` exactly with `CORS_ORIGIN`; do not add a wildcard.
 - **Unexpected shared rate limits:** verify proxy topology and `TRUST_PROXY_HOPS`, then inspect the deployment-specific Redis prefix.
-- **Lifecycle email not received:** verify `MAIL_TRANSPORT=smtp`, sender/SMTP secrets, `PUBLIC_WEB_URL`, provider delivery logs, and SPF/DKIM/DMARC. Never switch production to the memory outbox.
+- **Lifecycle email not received:** verify `MAIL_TRANSPORT=smtp`, sender/SMTP configuration, paired credentials, `PUBLIC_WEB_URL`, provider delivery logs, and SPF/DKIM/DMARC. Never switch production to the memory outbox.
+- **Development outbox returns 404:** confirm the API is non-production, memory delivery is selected, `DEV_MAIL_OUTBOX_KEY` is set to a 16–128 character fake development value, and the same value is sent only in `X-Dev-Mail-Outbox-Key`.
 - **401 on protected routes:** verify cookie domain/HTTPS/Secure behavior and session expiry/revocation; never log the cookie.
 - **OpenAPI drift:** run `pnpm openapi:generate`, review the semantic change, then commit the regenerated artifact. Do not hand-edit the JSON.
 - **Restore/client mismatch:** install matching PostgreSQL client tools and create a fresh verified dump; do not bypass the check casually.
@@ -172,7 +176,7 @@ For a bad database migration, prefer a reviewed forward-fix migration. If incide
 ## Prohibited shortcuts
 
 - Do not commit real credentials, cookies, tokens, `.env` files, or database dumps.
-- Do not expose the development mail outbox or enable its raw-token transport in production.
+- Do not expose the development mail outbox, place its key in a query string/log, or enable its raw-token transport in production.
 - Do not use wildcard credentialed CORS or blindly trust `X-Forwarded-For`.
 - Do not disable Origin protection or rate limiting to make a smoke test pass.
 - Do not rewrite applied migrations, run `prisma migrate reset`, or restore over the live database.

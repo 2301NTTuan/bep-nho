@@ -5,7 +5,6 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import {
   EMAIL_VERIFICATION_TTL_MS,
@@ -14,6 +13,7 @@ import {
 import { MailDeliveryService } from './mail-delivery.service';
 import { createOpaqueToken, hashOpaqueToken } from './opaque-token';
 import { PasswordService } from './password.service';
+import { AccountLifecycleLockService } from './account-lifecycle-lock.service';
 
 const GENERIC_REQUEST_RESULT = { accepted: true } as const;
 
@@ -25,6 +25,7 @@ export class AccountLifecycleService {
     private readonly prisma: PrismaService,
     private readonly passwords: PasswordService,
     private readonly mail: MailDeliveryService,
+    private readonly lifecycleLock: AccountLifecycleLockService,
   ) {}
 
   async requestEmailVerification(email: string) {
@@ -36,7 +37,7 @@ export class AccountLifecycleService {
     if (credential && credential.user.status === 'active' && !credential.emailVerifiedAt) {
       const token = createOpaqueToken();
       await this.prisma.$transaction(async (tx) => {
-        await this.lockAccount(tx, credential.userId);
+        await this.lifecycleLock.acquire(tx, credential.userId, 'email_verification_request');
         await tx.emailVerificationToken.updateMany({
           where: { userId: credential.userId, usedAt: null },
           data: { usedAt: new Date() },
@@ -64,7 +65,7 @@ export class AccountLifecycleService {
 
     const verifiedAt = new Date();
     await this.prisma.$transaction(async (tx) => {
-      await this.lockAccount(tx, token.userId);
+      await this.lifecycleLock.acquire(tx, token.userId, 'email_verification_confirm');
       const consumed = await tx.emailVerificationToken.updateMany({
         where: { id: token.id, usedAt: null, expiresAt: { gt: verifiedAt } },
         data: { usedAt: verifiedAt },
@@ -94,7 +95,7 @@ export class AccountLifecycleService {
     if (credential && credential.user.status === 'active') {
       const token = createOpaqueToken();
       await this.prisma.$transaction(async (tx) => {
-        await this.lockAccount(tx, credential.userId);
+        await this.lifecycleLock.acquire(tx, credential.userId, 'password_reset_request');
         await tx.passwordResetToken.updateMany({
           where: { userId: credential.userId, usedAt: null },
           data: { usedAt: new Date() },
@@ -122,7 +123,7 @@ export class AccountLifecycleService {
     const passwordHash = await this.passwords.hash(newPassword);
     const now = new Date();
     await this.prisma.$transaction(async (tx) => {
-      await this.lockAccount(tx, token.userId);
+      await this.lifecycleLock.acquire(tx, token.userId, 'password_reset_confirm');
       const consumed = await tx.passwordResetToken.updateMany({
         where: { id: token.id, usedAt: null, expiresAt: { gt: now } },
         data: { usedAt: now },
@@ -144,7 +145,7 @@ export class AccountLifecycleService {
 
   async changePassword(userId: string, currentSessionId: string, currentPassword: string, newPassword: string) {
     return this.prisma.$transaction(async (tx) => {
-      await this.lockAccount(tx, userId);
+      await this.lifecycleLock.acquire(tx, userId, 'password_change');
       const credential = await tx.userCredential.findUnique({ where: { userId } });
       if (!credential || !(await this.passwords.verify(currentPassword, credential.passwordHash))) {
         throw new UnauthorizedException('Current password is incorrect.');
@@ -208,7 +209,7 @@ export class AccountLifecycleService {
 
   async deleteAccount(userId: string, password: string) {
     await this.prisma.$transaction(async (tx) => {
-      await this.lockAccount(tx, userId);
+      await this.lifecycleLock.acquire(tx, userId, 'account_delete');
       const credential = await tx.userCredential.findUnique({ where: { userId } });
       if (!credential || !(await this.passwords.verify(password, credential.passwordHash))) {
         throw new UnauthorizedException('Password confirmation failed.');
@@ -217,10 +218,6 @@ export class AccountLifecycleService {
     });
     this.logger.log('Account lifecycle event: account and user-owned data deleted');
     return { deleted: true };
-  }
-
-  private async lockAccount(tx: Prisma.TransactionClient, userId: string): Promise<void> {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`account-lifecycle:${userId}`}))`;
   }
 
   private async deliverSafely(delivery: () => Promise<void>): Promise<void> {

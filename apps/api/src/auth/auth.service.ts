@@ -7,6 +7,7 @@ import { SESSION_LAST_USED_WRITE_INTERVAL_MS, SESSION_TTL_MS } from './auth.cons
 import type { AuthenticatedIdentity } from './auth.types';
 import { PasswordService } from './password.service';
 import { AccountLifecycleService } from './account-lifecycle.service';
+import { AccountLifecycleLockService } from './account-lifecycle-lock.service';
 import { createOpaqueToken, hashOpaqueToken } from './opaque-token';
 
 function normalizeEmail(email: string): string {
@@ -24,15 +25,16 @@ export class AuthService {
     private readonly passwords: PasswordService,
     private readonly currentUser: CurrentUserService,
     private readonly lifecycle: AccountLifecycleService,
+    private readonly lifecycleLock: AccountLifecycleLockService,
   ) {}
 
   async register(email: string, password: string) {
     const normalizedEmail = normalizeEmail(email);
     const passwordHash = await this.passwords.hash(password);
 
-    let user: { id: string };
+    let session: { userId: string; token: string; expiresAt: Date };
     try {
-      user = await this.prisma.$transaction(async (tx) => {
+      session = await this.prisma.$transaction(async (tx) => {
         const created = await tx.user.create({
           data: { authSubject: `local:${randomUUID()}` },
           select: { id: true },
@@ -40,7 +42,8 @@ export class AuthService {
         await tx.userCredential.create({
           data: { userId: created.id, normalizedEmail, passwordHash },
         });
-        return created;
+        await this.lifecycleLock.acquire(tx, created.id, 'register');
+        return this.createSession(tx, created.id);
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -50,45 +53,67 @@ export class AuthService {
     }
 
     await this.lifecycle.requestEmailVerification(normalizedEmail);
-    return this.establishSession(user.id);
+    return this.sessionResult(session);
   }
 
   async login(email: string, password: string) {
-    const credential = await this.prisma.userCredential.findUnique({
+    const candidate = await this.prisma.userCredential.findUnique({
       where: { normalizedEmail: normalizeEmail(email) },
-      include: { user: true },
+      select: { userId: true },
     });
 
-    const validPassword = credential
-      ? await this.passwords.verify(password, credential.passwordHash)
-      : (await this.passwords.consumeDummyVerification(password), false);
-
-    if (!credential || !validPassword || credential.user.status !== 'active') {
+    if (!candidate) {
+      await this.passwords.consumeDummyVerification(password);
       throw new UnauthorizedException('Invalid email or password.');
     }
 
-    return this.establishSession(credential.userId);
+    const session = await this.prisma.$transaction(async (tx) => {
+      await this.lifecycleLock.acquire(tx, candidate.userId, 'login');
+      const credential = await tx.userCredential.findUnique({
+        where: { userId: candidate.userId },
+        include: { user: { select: { status: true } } },
+      });
+      if (
+        !credential ||
+        credential.user.status !== 'active' ||
+        !(await this.passwords.verify(password, credential.passwordHash))
+      ) {
+        throw new UnauthorizedException('Invalid email or password.');
+      }
+      return this.createSession(tx, credential.userId);
+    });
+
+    return this.sessionResult(session);
   }
 
   async establishSession(userId: string) {
-    const user = await this.prisma.user.findFirst({
-      where: { id: userId, status: 'active' },
-      select: { id: true },
+    const session = await this.prisma.$transaction(async (tx) => {
+      await this.lifecycleLock.acquire(tx, userId, 'establish_session');
+      const user = await tx.user.findFirst({
+        where: { id: userId, status: 'active' },
+        select: { id: true },
+      });
+      if (!user) throw new UnauthorizedException('Authentication required.');
+      return this.createSession(tx, userId);
     });
-    if (!user) {
-      throw new UnauthorizedException('Authentication required.');
-    }
 
+    return this.sessionResult(session);
+  }
+
+  private async createSession(tx: Prisma.TransactionClient, userId: string) {
     const token = createOpaqueToken().raw;
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
-    await this.prisma.authSession.create({
+    await tx.authSession.create({
       data: { userId, tokenHash: hashSessionToken(token), expiresAt },
     });
+    return { userId, token, expiresAt };
+  }
 
+  private async sessionResult(session: { userId: string; token: string; expiresAt: Date }) {
     return {
-      token,
-      expiresAt,
-      context: await this.currentUser.resolveById(userId),
+      token: session.token,
+      expiresAt: session.expiresAt,
+      context: await this.currentUser.resolveById(session.userId),
     };
   }
 

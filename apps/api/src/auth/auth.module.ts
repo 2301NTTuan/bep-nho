@@ -9,6 +9,7 @@ import { AuthRateLimitGuard } from './auth-rate-limit.guard';
 import { AuthRateLimitService } from './auth-rate-limit.service';
 import { AccountLifecycleService } from './account-lifecycle.service';
 import { DevelopmentMailOutbox, MailDeliveryService } from './mail-delivery.service';
+import { AccountLifecycleLockService } from './account-lifecycle-lock.service';
 
 @Module({
   imports: [IdentityModule],
@@ -21,6 +22,7 @@ import { DevelopmentMailOutbox, MailDeliveryService } from './mail-delivery.serv
     AuthRateLimitService,
     AuthRateLimitGuard,
     AccountLifecycleService,
+    AccountLifecycleLockService,
     DevelopmentMailOutbox,
     MailDeliveryService,
   ],
@@ -29,6 +31,7 @@ import { DevelopmentMailOutbox, MailDeliveryService } from './mail-delivery.serv
     SessionCookieService,
     SessionAuthGuard,
     AccountLifecycleService,
+    AccountLifecycleLockService,
     DevelopmentMailOutbox,
   ],
 })

@@ -1,9 +1,10 @@
-import { Controller, Get, NotFoundException, Post, Res } from '@nestjs/common';
+import { BadRequestException, Controller, Get, NotFoundException, Post, Query, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from '../auth/auth.service';
 import type { CookieResponse } from '../auth/auth.types';
 import { SessionCookieService } from '../auth/cookies';
 import { CurrentUserService } from '../identity/current-user.service';
+import { DevelopmentMailOutbox, type LifecycleMailType } from '../auth/mail-delivery.service';
 
 @Controller('dev')
 export class DevController {
@@ -12,6 +13,7 @@ export class DevController {
     private readonly config: ConfigService,
     private readonly auth: AuthService,
     private readonly cookies: SessionCookieService,
+    private readonly mailOutbox: DevelopmentMailOutbox,
   ) {}
 
   @Get('bootstrap')
@@ -50,5 +52,23 @@ export class DevController {
         ...result.context,
       },
     };
+  }
+
+  @Get('mail-outbox/latest')
+  latestMail(
+    @Query('email') email: string | undefined,
+    @Query('type') type: string | undefined,
+  ) {
+    const environment = this.config.get<string>('NODE_ENV', 'development');
+    if (environment === 'production') throw new NotFoundException();
+    if (
+      !email ||
+      (type !== 'email_verification' && type !== 'password_reset')
+    ) {
+      throw new BadRequestException('A valid email and mail type are required.');
+    }
+    const message = this.mailOutbox.latest(email, type as LifecycleMailType);
+    if (!message) throw new NotFoundException('Development mail was not found.');
+    return { data: message };
   }
 }

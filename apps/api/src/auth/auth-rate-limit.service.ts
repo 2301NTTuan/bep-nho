@@ -10,7 +10,13 @@ import Redis from 'ioredis';
 import { RateLimiterRedis, type RateLimiterRes } from 'rate-limiter-flexible';
 import { MetricsService } from '../observability/metrics.service';
 
-export type AuthRateLimitEndpoint = 'login' | 'register';
+export type AuthRateLimitEndpoint =
+  | 'login'
+  | 'register'
+  | 'email_verification_request'
+  | 'email_verification_confirm'
+  | 'password_reset_request'
+  | 'password_reset_confirm';
 
 export class AuthRateLimitExceededException extends HttpException {
   constructor(readonly retryAfter: number) {
@@ -37,6 +43,12 @@ export class AuthRateLimitService implements OnModuleDestroy {
     const registerPoints = isTest && process.env.AUTH_RATE_LIMIT_REGISTER_POINTS === undefined
       ? 10_000
       : config.get<number>('AUTH_RATE_LIMIT_REGISTER_POINTS', 5);
+    const lifecycleRequestPoints = isTest && process.env.AUTH_RATE_LIMIT_LIFECYCLE_REQUEST_POINTS === undefined
+      ? 10_000
+      : config.get<number>('AUTH_RATE_LIMIT_LIFECYCLE_REQUEST_POINTS', 5);
+    const lifecycleConfirmPoints = isTest && process.env.AUTH_RATE_LIMIT_LIFECYCLE_CONFIRM_POINTS === undefined
+      ? 10_000
+      : config.get<number>('AUTH_RATE_LIMIT_LIFECYCLE_CONFIRM_POINTS', 10);
     this.redis = new Redis(config.getOrThrow<string>('REDIS_URL'), {
       lazyConnect: true,
       connectTimeout: 1_000,
@@ -58,6 +70,30 @@ export class AuthRateLimitService implements OnModuleDestroy {
         storeClient: this.redis,
         keyPrefix: `${keyPrefix}:register`,
         points: registerPoints,
+        duration,
+      }),
+      email_verification_request: new RateLimiterRedis({
+        storeClient: this.redis,
+        keyPrefix: `${keyPrefix}:email-verification-request`,
+        points: lifecycleRequestPoints,
+        duration,
+      }),
+      email_verification_confirm: new RateLimiterRedis({
+        storeClient: this.redis,
+        keyPrefix: `${keyPrefix}:email-verification-confirm`,
+        points: lifecycleConfirmPoints,
+        duration,
+      }),
+      password_reset_request: new RateLimiterRedis({
+        storeClient: this.redis,
+        keyPrefix: `${keyPrefix}:password-reset-request`,
+        points: lifecycleRequestPoints,
+        duration,
+      }),
+      password_reset_confirm: new RateLimiterRedis({
+        storeClient: this.redis,
+        keyPrefix: `${keyPrefix}:password-reset-confirm`,
+        points: lifecycleConfirmPoints,
         duration,
       }),
     };

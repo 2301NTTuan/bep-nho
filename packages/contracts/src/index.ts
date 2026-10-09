@@ -89,7 +89,14 @@ export type PersonalizedAdjustmentDecisionsResponse = ApiEnvelope<PersonalizedAd
 
 export type CurrentUserContext = {
   environment?: string;
-  user: { id: string; locale: string; timezone: string };
+  user: {
+    id: string;
+    locale: string;
+    timezone: string;
+    email: string | null;
+    emailVerified: boolean;
+    emailVerifiedAt: string | null;
+  };
   tasteProfile: {
     id: string; sampleCount: number; maturityScore: number;
     dimensions: Array<{ key: string; score: number; confidence: number }>;
@@ -98,6 +105,33 @@ export type CurrentUserContext = {
 export type CurrentUserResponse = ApiEnvelope<CurrentUserContext>;
 export type AuthCredentials = { email: string; password: string };
 export type LogoutResponse = ApiEnvelope<{ loggedOut: boolean }>;
+export type LifecycleRequestResponse = ApiEnvelope<{ accepted: true }>;
+export type EmailVerificationResponse = ApiEnvelope<{
+  verified: true;
+  emailVerifiedAt: string;
+}>;
+export type PasswordResetResponse = ApiEnvelope<{
+  passwordReset: true;
+  loginRequired: true;
+}>;
+export type ChangePasswordResponse = ApiEnvelope<{
+  passwordChanged: true;
+  revokedOtherSessions: number;
+}>;
+export type AccountSession = {
+  id: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string;
+  current: boolean;
+};
+export type AccountSessionsResponse = ApiEnvelope<AccountSession[]>;
+export type RevokeSessionResponse = ApiEnvelope<{
+  revoked: true;
+  currentSessionRevoked: boolean;
+}>;
+export type RevokeOtherSessionsResponse = ApiEnvelope<{ revoked: number }>;
+export type DeleteAccountResponse = ApiEnvelope<{ deleted: true }>;
 
 export type CookSessionEvent = {
   id: string; eventType: CookEventType; clientSeq: number; clientTime: string;

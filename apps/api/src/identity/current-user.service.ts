@@ -20,6 +20,11 @@ export class CurrentUserService {
   async resolveById(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
+      include: {
+        credential: {
+          select: { normalizedEmail: true, emailVerifiedAt: true },
+        },
+      },
     });
 
     if (!user) {
@@ -41,6 +46,9 @@ export class CurrentUserService {
         id: user.id,
         locale: user.locale,
         timezone: user.timezone,
+        email: user.credential?.normalizedEmail ?? null,
+        emailVerified: user.credential ? user.credential.emailVerifiedAt !== null : true,
+        emailVerifiedAt: user.credential?.emailVerifiedAt?.toISOString() ?? null,
       },
       tasteProfile: tasteProfile
         ? {

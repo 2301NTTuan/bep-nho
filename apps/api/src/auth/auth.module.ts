@@ -7,6 +7,8 @@ import { PasswordService } from './password.service';
 import { SessionAuthGuard } from './session-auth.guard';
 import { AuthRateLimitGuard } from './auth-rate-limit.guard';
 import { AuthRateLimitService } from './auth-rate-limit.service';
+import { AccountLifecycleService } from './account-lifecycle.service';
+import { DevelopmentMailOutbox, MailDeliveryService } from './mail-delivery.service';
 
 @Module({
   imports: [IdentityModule],
@@ -18,7 +20,16 @@ import { AuthRateLimitService } from './auth-rate-limit.service';
     SessionAuthGuard,
     AuthRateLimitService,
     AuthRateLimitGuard,
+    AccountLifecycleService,
+    DevelopmentMailOutbox,
+    MailDeliveryService,
   ],
-  exports: [AuthService, SessionCookieService, SessionAuthGuard],
+  exports: [
+    AuthService,
+    SessionCookieService,
+    SessionAuthGuard,
+    AccountLifecycleService,
+    DevelopmentMailOutbox,
+  ],
 })
 export class AuthModule {}

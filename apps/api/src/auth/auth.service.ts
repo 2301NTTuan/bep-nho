@@ -1,18 +1,20 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { CurrentUserService } from '../identity/current-user.service';
-import { SESSION_TTL_MS } from './auth.constants';
+import { SESSION_LAST_USED_WRITE_INTERVAL_MS, SESSION_TTL_MS } from './auth.constants';
 import type { AuthenticatedIdentity } from './auth.types';
 import { PasswordService } from './password.service';
+import { AccountLifecycleService } from './account-lifecycle.service';
+import { createOpaqueToken, hashOpaqueToken } from './opaque-token';
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
 export function hashSessionToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
+  return hashOpaqueToken(token);
 }
 
 @Injectable()
@@ -21,6 +23,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly passwords: PasswordService,
     private readonly currentUser: CurrentUserService,
+    private readonly lifecycle: AccountLifecycleService,
   ) {}
 
   async register(email: string, password: string) {
@@ -46,6 +49,7 @@ export class AuthService {
       throw error;
     }
 
+    await this.lifecycle.requestEmailVerification(normalizedEmail);
     return this.establishSession(user.id);
   }
 
@@ -75,7 +79,7 @@ export class AuthService {
       throw new UnauthorizedException('Authentication required.');
     }
 
-    const token = randomBytes(32).toString('base64url');
+    const token = createOpaqueToken().raw;
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
     await this.prisma.authSession.create({
       data: { userId, tokenHash: hashSessionToken(token), expiresAt },
@@ -103,7 +107,10 @@ export class AuthService {
       return null;
     }
 
-    if (!session.lastUsedAt || Date.now() - session.lastUsedAt.getTime() >= 5 * 60 * 1000) {
+    if (
+      !session.lastUsedAt ||
+      Date.now() - session.lastUsedAt.getTime() >= SESSION_LAST_USED_WRITE_INTERVAL_MS
+    ) {
       await this.prisma.authSession.updateMany({
         where: { id: session.id, revokedAt: null },
         data: { lastUsedAt: new Date() },

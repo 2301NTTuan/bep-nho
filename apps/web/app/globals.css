@@ -59,12 +59,12 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 3px sol
 .tasteCard { position: relative; display: flex; min-height: 560px; overflow: hidden; flex-direction: column; justify-content: flex-end; padding: 34px; border-radius: 34px; background: var(--green); color: #fffaf0; box-shadow: var(--shadow); }
 .tasteOrnament { position: absolute; top: -22px; right: -8px; color: rgba(255,255,255,.06); font-family: var(--serif); font-size: 210px; line-height: 1; }
 .smallLabel { color: var(--muted); font-size: 11px; font-weight: 900; letter-spacing: .11em; text-transform: uppercase; }
-.smallLabel.light { color: rgba(255,255,255,.63); }
+.smallLabel.light { color: rgba(255,255,255,.82); }
 .tasteCard strong { position: relative; display: block; margin: 13px 0 7px; font-family: var(--serif); font-size: 72px; font-weight: 500; line-height: 1; }
 .tasteCard p { position: relative; margin: 0; color: rgba(255,255,255,.72); line-height: 1.55; }
 .tasteProgress { height: 5px; margin: 28px 0 15px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.14); }
 .tasteProgress span { display: block; height: 100%; border-radius: inherit; background: #e9bc68; }
-.tasteMeta { color: rgba(255,255,255,.65); font-size: 12px; }
+.tasteMeta { color: rgba(255,255,255,.82); font-size: 12px; }
 .tasteMeta span { color: white; font-weight: 900; }
 
 .recipeSection { padding: 84px 0 30px; }
@@ -76,10 +76,10 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 3px sol
 .recipeCard:hover { transform: translateY(-5px); box-shadow: var(--shadow); }
 .recipeVisual { position: relative; display: grid; min-height: 205px; place-items: center; overflow: hidden; background: #7b3829; }
 .recipeVisual.tone2 { background: #496649; }
-.recipeVisual.tone3 { background: #a06b35; }
+.recipeVisual.tone3 { background: #765027; }
 .recipeVisual::before, .detailVisual::before { content: ''; position: absolute; width: 260px; height: 260px; border: 1px solid rgba(255,255,255,.13); border-radius: 50%; box-shadow: 0 0 0 28px rgba(255,255,255,.035), 0 0 0 60px rgba(255,255,255,.025); }
-.recipeIndex { position: absolute; top: 18px; right: 21px; color: rgba(255,255,255,.45); font-family: var(--serif); font-size: 15px; }
-.lightPill { position: absolute; bottom: 17px; left: 18px; color: white !important; background: rgba(255,255,255,.14) !important; backdrop-filter: blur(10px); }
+.recipeIndex { position: absolute; top: 18px; right: 21px; color: rgba(255,255,255,.88); font-family: var(--serif); font-size: 15px; }
+.lightPill { position: absolute; bottom: 17px; left: 18px; color: white !important; background: rgba(20,20,18,.55) !important; backdrop-filter: blur(10px); }
 .bowl, .heroBowl { position: relative; display: block; width: 132px; height: 62px; border-radius: 8px 8px 80px 80px; border-bottom: 6px solid rgba(255,255,255,.9); background: rgba(255,255,255,.83); box-shadow: inset 0 -14px 20px rgba(98,45,29,.1), 0 16px 24px rgba(0,0,0,.15); }
 .bowl::after, .heroBowl::after { content: ''; position: absolute; top: -7px; left: -5px; width: 142px; height: 18px; border-radius: 50%; background: #e8c77a; box-shadow: inset 0 0 0 5px rgba(92,48,26,.23); }
 .bowl i, .heroBowl i { position: absolute; z-index: 2; top: -46px; left: 48px; width: 2px; height: 36px; border-radius: 50%; border-left: 3px solid rgba(255,255,255,.6); transform: rotate(-8deg); }
@@ -135,14 +135,14 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 3px sol
 .panelTitle { display: flex; align-items: flex-end; justify-content: space-between; gap: 15px; margin-bottom: 18px; }.panelTitle > div { display: flex; align-items: center; gap: 12px; }.panelTitle > div > span { color: var(--red); font-family: var(--serif); font-size: 12px; }.panelTitle h2 { margin: 0; font-size: 26px; }.panelTitle small { color: var(--muted); }
 .ingredientList, .stepList { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
 .ingredient { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 15px 0; border-bottom: 1px dashed var(--line); }.ingredient:last-child { border-bottom: 0; }.ingredient > div:first-child { display: grid; gap: 4px; }.ingredient > div:first-child span { color: var(--muted); font-size: 11px; }.ingredientAmount { display: flex; align-items: center; gap: 8px; white-space: nowrap; }.ingredientAmount small { color: #aaa096; text-decoration: line-through; }.ingredientAmount.adjusted b { color: var(--green); }
-.stepItem { display: grid; grid-template-columns: 42px 1fr; gap: 15px; padding: 19px 0; border-bottom: 1px solid var(--line); }.stepItem:last-child { border-bottom: 0; }.stepNumber { display: grid; width: 39px; height: 39px; place-items: center; border-radius: 50%; background: var(--red-soft); color: var(--red-dark); font-family: var(--serif); font-size: 13px; font-weight: 900; }.stepItem p { margin: 1px 0 9px; line-height: 1.55; }.stepMeta { display: flex; gap: 7px; }.stepMeta span { padding: 5px 8px; border-radius: 6px; background: #f0eadf; color: var(--muted); font-size: 10px; font-weight: 800; }.tip { margin-top: 10px; padding: 10px 12px; border-left: 2px solid var(--gold); background: #fcf5e7; color: #745d32; font-size: 12px; font-style: normal; line-height: 1.5; }
+.stepItem { display: grid; grid-template-columns: 42px 1fr; gap: 15px; padding: 19px 0; border-bottom: 1px solid var(--line); }.stepItem:last-child { border-bottom: 0; }.stepNumber { display: grid; width: 39px; height: 39px; place-items: center; border-radius: 50%; background: var(--red-soft); color: var(--red-dark); font-family: var(--serif); font-size: 13px; font-weight: 900; }.stepItem p { margin: 1px 0 9px; line-height: 1.55; }.stepMeta { display: flex; gap: 7px; }.stepMeta span { padding: 5px 8px; border-radius: 6px; background: #f0eadf; color: #655d54; font-size: 10px; font-weight: 800; }.tip { margin-top: 10px; padding: 10px 12px; border-left: 2px solid var(--gold); background: #fcf5e7; color: #745d32; font-size: 12px; font-style: normal; line-height: 1.5; }
 .stickyCook { position: fixed; z-index: 10; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; gap: 80px; padding: 12px 20px; border-top: 1px solid var(--line); background: rgba(255,253,248,.92); box-shadow: 0 -12px 35px rgba(50,35,20,.08); backdrop-filter: blur(16px); }.stickyCook > div { display: grid; gap: 3px; }.stickyCook span { color: var(--muted); font-size: 11px; }.stickyCook .button { min-height: 46px; }.detailFooter { margin-top: 40px; color: var(--muted); font-size: 11px; text-align: center; }
 
 /* Cook mode */
 .cookMode { min-height: 100vh; padding: 0 0 40px; background: #eee7db; }
 .cookTopbar { display: flex; align-items: center; gap: 14px; padding: 17px max(20px, calc((100vw - 1080px)/2)); background: var(--green-dark); color: white; }.cookBrand { display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid rgba(255,255,255,.25); border-radius: 50%; font-family: var(--serif); font-weight: 900; }.cookTopbar > div { display: grid; flex: 1; gap: 2px; }.cookTopbar > div span { color: rgba(255,255,255,.55); font-size: 9px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }.cookTopbar > div strong { font-family: var(--serif); font-size: 17px; }.cookTopbar .pill { background: rgba(255,255,255,.1); color: white; }
 .cookProgress { height: 5px; background: #d2c8ba; }.cookProgress span { display: block; height: 100%; background: var(--gold); transition: width .25s ease; }
-.cookWorkspace { width: min(920px, calc(100% - 32px)); margin: 0 auto; padding-top: 34px; }.cookStepMeta { display: flex; justify-content: space-between; margin-bottom: 12px; color: var(--muted); font-size: 11px; font-weight: 800; }.cookStepMeta b { color: var(--green); }
+.cookWorkspace { width: min(920px, calc(100% - 32px)); margin: 0 auto; padding-top: 34px; }.cookStepMeta { display: flex; justify-content: space-between; margin-bottom: 12px; color: #655d54; font-size: 11px; font-weight: 800; }.cookStepMeta b { color: var(--green); }
 .cookCard { display: grid; min-height: 440px; grid-template-columns: 85px 1fr; overflow: hidden; border-radius: 25px; background: var(--white); box-shadow: var(--shadow); }.stepBadge { display: flex; justify-content: center; padding-top: 47px; background: var(--red); color: rgba(255,255,255,.9); font-family: var(--serif); font-size: 27px; }.cookCopy { display: flex; flex-direction: column; justify-content: center; padding: clamp(32px, 7vw, 72px); }.cookCopy h1 { max-width: 700px; margin: 15px 0 24px; font-family: var(--serif); font-size: clamp(31px, 5.2vw, 51px); font-weight: 500; letter-spacing: -.035em; line-height: 1.18; }.timerLabel { display: inline-flex; width: fit-content; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 9px; background: #eee8dd; color: var(--muted); font-size: 12px; font-weight: 800; }.timerLabel i { width: 10px; height: 10px; border: 1px solid currentColor; border-radius: 50%; }.tipBox { margin-top: 25px; padding: 17px 19px; border-left: 3px solid var(--gold); background: #fbf3e5; }.tipBox span { color: #8a6429; font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }.tipBox p { margin: 5px 0 0; color: #654f32; line-height: 1.55; }
 .cookActions { display: flex; justify-content: space-between; gap: 12px; margin-top: 16px; }.cookNext { min-width: 210px; }
 
@@ -224,6 +224,7 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 3px sol
 .tasteLink { width: fit-content; color: var(--gold); font-size: 11px; font-weight: 900; }
 .tasteShell { padding-bottom: 80px; }
 .tasteHero { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 40px; align-items: center; padding: 48px; border-radius: 28px; background: var(--green-dark); color: white; }
+.tasteHero .eyebrow { color: #ffd8cf; }
 .tasteHero h1 { max-width: 760px; margin: 14px 0 16px; font-family: var(--serif); font-size: clamp(40px, 6vw, 68px); font-weight: 500; letter-spacing: -.045em; line-height: 1.03; }
 .tasteHero p { max-width: 650px; margin: 0; color: rgba(255,255,255,.68); line-height: 1.65; }
 .tasteSummary { display: grid; gap: 4px; padding: 26px; border: 1px solid rgba(255,255,255,.18); border-radius: 20px; background: rgba(255,255,255,.06); }

@@ -1,5 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
+try {
+  process.loadEnvFile('.env');
+} catch (error) {
+  if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+}
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
@@ -20,7 +26,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'pnpm --filter @bep-nho/api start',
+      command: 'pnpm storage:ensure && pnpm --filter @bep-nho/api start',
       url: 'http://127.0.0.1:3001/v1/health/ready',
       timeout: 120_000,
       reuseExistingServer: !process.env.CI,
@@ -38,6 +44,13 @@ export default defineConfig({
       timeout: 120_000,
       reuseExistingServer: !process.env.CI,
       env: { ...process.env, NODE_ENV: 'production' },
+    },
+    {
+      command: 'pnpm --filter @bep-nho/admin start',
+      url: 'http://127.0.0.1:3002/login',
+      timeout: 120_000,
+      reuseExistingServer: !process.env.CI,
+      env: { ...process.env, NODE_ENV: 'production', PORT: '3002' },
     },
   ],
 });

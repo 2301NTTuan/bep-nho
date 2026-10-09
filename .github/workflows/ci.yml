@@ -1,18 +1,147 @@
 name: ci
+
 on:
   pull_request:
+    branches: [main]
   push:
     branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: '10.34.6'
+  DATABASE_URL: postgresql://bep_nho_ci:ci_only_password@127.0.0.1:5432/bep_nho_ci
+  REDIS_URL: redis://127.0.0.1:6379
+  S3_ENDPOINT: http://127.0.0.1:9000
+  S3_ACCESS_KEY: ci-placeholder
+  S3_SECRET_KEY: ci-placeholder
+  S3_BUCKET: ci-placeholder
+  CORS_ORIGIN: http://localhost:3000,http://127.0.0.1:3000
+  NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:3001/v1
+
 jobs:
-  quality:
+  static:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: {version: 9}
       - uses: actions/setup-node@v4
-        with: {node-version: 22, cache: pnpm}
-      - run: pnpm install --no-frozen-lockfile
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pinned pnpm
+        run: corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:validate
       - run: pnpm typecheck
-      - run: pnpm test
+      - run: pnpm openapi:check
       - run: pnpm build
+      - name: Check tracked secret signatures
+        run: |
+          if git grep -nEI 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}' -- ':!pnpm-lock.yaml'; then
+            echo 'Potential tracked secret detected.' >&2
+            exit 1
+          fi
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: bep_nho_ci
+          POSTGRES_USER: bep_nho_ci
+          POSTGRES_PASSWORD: ci_only_password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U bep_nho_ci -d bep_nho_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pinned pnpm
+        run: corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+      - run: pnpm install --frozen-lockfile
+      - name: Deploy migrations
+        run: pnpm --filter @bep-nho/database exec prisma migrate deploy --schema prisma/schema.prisma
+      - run: pnpm test
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: bep_nho_ci
+          POSTGRES_USER: bep_nho_ci
+          POSTGRES_PASSWORD: ci_only_password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U bep_nho_ci -d bep_nho_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pinned pnpm
+        run: corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+      - run: pnpm install --frozen-lockfile
+      - name: Deploy migrations and deterministic alpha seed
+        run: |
+          pnpm --filter @bep-nho/database exec prisma migrate deploy --schema prisma/schema.prisma
+          pnpm --filter @bep-nho/database db:seed
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright test
+      - name: Upload failure screenshots and report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-${{ github.run_id }}
+          path: |
+            test-results/**/*.png
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high

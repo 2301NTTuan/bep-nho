@@ -93,6 +93,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
           {registering ? 'Đã có tài khoản?' : 'Chưa có tài khoản?'}{' '}
           <Link href={registering ? '/login' : '/register'}>{registering ? 'Đăng nhập' : 'Tạo tài khoản'}</Link>
         </p>
+        {!registering && <p className="authSwitch"><Link href="/forgot-password">Quên mật khẩu?</Link></p>}
 
         {!registering && process.env.NODE_ENV !== 'production' && (
           <button className="devAuthButton" type="button" disabled={busy} onClick={() => void useDevAccount()}>

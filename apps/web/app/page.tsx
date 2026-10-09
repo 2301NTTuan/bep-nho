@@ -97,6 +97,7 @@ export default function Home() {
         <nav className="topnav" aria-label="Điều hướng chính">
           <a href="#recipes">Món hôm nay</a>
           {currentUser && <Link href="/taste">Taste DNA</Link>}
+          {currentUser && <Link href="/account">Tài khoản</Link>}
           {currentUser ? (
             <button className="navAction" type="button" disabled={authBusy} onClick={() => void logout()}>Đăng xuất</button>
           ) : authChecked ? (
@@ -104,6 +105,13 @@ export default function Home() {
           ) : null}
         </nav>
       </header>
+
+      {currentUser?.user.email && !currentUser.user.emailVerified && (
+        <section className="verificationBanner" role="status">
+          <span>Email của bạn chưa được xác minh.</span>
+          <Link href="/account">Mở cài đặt tài khoản →</Link>
+        </section>
+      )}
 
       <section className="hero">
         <div className="heroCard">

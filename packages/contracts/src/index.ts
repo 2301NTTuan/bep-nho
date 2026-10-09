@@ -16,6 +16,7 @@ export type RecipeListItem = {
   latestVersion: {
     versionNo: number; servings: number; prepTimeMinutes: number | null;
     cookTimeMinutes: number | null; summary: string | null; publishedAt: string | null;
+    heroMedia: RecipeHeroMedia | null;
   } | null;
 };
 export type RecipeListResponse = ApiEnvelope<RecipeListItem[]> & { meta: ApiMeta & { count: number } };
@@ -29,11 +30,15 @@ export type RecipeStep = {
   stepNo: number; instruction: string; durationSeconds: number | null;
   heatLevel: string | null; tip: string | null;
 };
+export type RecipeHeroMedia = {
+  id: string; url: string; alt: string | null; width: number | null; height: number | null;
+};
 export type RecipeDetail = {
   id: string; slug: string; title: string; cuisine: string;
   version: {
     id: string; versionNo: number; servings: number; prepTimeMinutes: number | null;
     cookTimeMinutes: number | null; summary: string | null; publishedAt: string | null;
+    heroMedia: RecipeHeroMedia | null;
     ingredients: RecipeIngredient[]; steps: RecipeStep[];
   };
 };
@@ -93,6 +98,7 @@ export type CurrentUserContext = {
     id: string;
     locale: string;
     timezone: string;
+    role: 'user' | 'admin';
     email: string | null;
     emailVerified: boolean;
     emailVerifiedAt: string | null;

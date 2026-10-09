@@ -268,6 +268,18 @@ export class CookSessionsService {
     const startedAt = new Date();
 
     const session = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtextextended(${`recipe-publish:${base.recipe.id}`}, 0)
+        ) IS NULL AS locked
+      `;
+      const currentRecipe = await tx.recipe.findUnique({
+        where: { id: base.recipe.id },
+        select: { status: true },
+      });
+      if (currentRecipe?.status !== 'published') {
+        throw new ConflictException('Recipe is not currently published');
+      }
       const created = await tx.cookSession.create({
         data: {
           userId: user.id,

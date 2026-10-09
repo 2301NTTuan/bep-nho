@@ -12,6 +12,7 @@ import { PersonalizationModule } from './personalization/personalization.module'
 import { DevModule } from './dev/dev.module';
 import { OriginGuard } from './http/origin.guard';
 import { ObservabilityModule } from './observability/observability.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { ObservabilityModule } from './observability/observability.module';
     CookSessionsModule,
     FeedbackModule,
     PersonalizationModule,
+    AdminModule,
     ...(process.env.NODE_ENV === 'production'
       ? []
       : [DevModule]),

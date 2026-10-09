@@ -20,9 +20,12 @@
     "openapi:check": "pnpm openapi:generate && git diff --exit-code -- docs/openapi/openapi.json",
     "e2e": "dotenv -e .env -- playwright test",
     "e2e:a11y": "dotenv -e .env -- playwright test --grep @a11y",
-    "sessions:cleanup": "node scripts/ops/cleanup-sessions.mjs"
+    "sessions:cleanup": "node scripts/ops/cleanup-sessions.mjs",
+    "admin:role": "dotenv -e .env -- node scripts/ops/admin-role.mjs",
+    "storage:ensure": "dotenv -e .env -- node apps/api/scripts/ensure-s3-bucket.mjs"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "3.1148.0",
     "@axe-core/playwright": "4.13.0",
     "@playwright/test": "1.64.0",
     "@prisma/client": "6.19.3",

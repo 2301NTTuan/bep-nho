@@ -28,6 +28,9 @@ export const envValidationSchema = Joi.object({
   S3_BUCKET: Joi.string()
     .required(),
 
+  S3_REGION: Joi.string().default('us-east-1'),
+  S3_FORCE_PATH_STYLE: Joi.boolean().truthy('true').falsy('false').default(true),
+
   CORS_ORIGIN: Joi.string()
     .default('http://localhost:3000,http://localhost:3002'),
 

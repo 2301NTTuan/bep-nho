@@ -33,6 +33,7 @@
     "testTimeout": 120000
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1148.0",
     "@bep-nho/contracts": "workspace:*",
     "@bep-nho/domain": "workspace:*",
     "@nestjs/common": "^10.0.0",
@@ -51,11 +52,13 @@
     "prom-client": "15.1.3",
     "rate-limiter-flexible": "11.2.1",
     "reflect-metadata": "^0.2.0",
-    "rxjs": "^7.8.0"
+    "rxjs": "^7.8.0",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
     "@types/jest": "29.5.14",
+    "@types/multer": "^2.3.0",
     "@types/node": "^24.19.1",
     "@types/nodemailer": "7.0.4",
     "dotenv": "16.6.1",

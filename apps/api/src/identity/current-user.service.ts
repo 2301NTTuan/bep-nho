@@ -46,6 +46,7 @@ export class CurrentUserService {
         id: user.id,
         locale: user.locale,
         timezone: user.timezone,
+        role: user.role,
         email: user.credential?.normalizedEmail ?? null,
         emailVerified: user.credential ? user.credential.emailVerifiedAt !== null : true,
         emailVerifiedAt: user.credential?.emailVerifiedAt?.toISOString() ?? null,

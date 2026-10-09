@@ -136,7 +136,34 @@ export class MeController {
   @Get('me')
   @UseGuards(SessionAuthGuard)
   @ApiOperation({ summary: 'Return the current authenticated user context.' })
-  @ApiResponse({ status: 200, description: 'Current user and Taste profile.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Current user, authoritative role, and Taste profile.',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: {
+            user: {
+              type: 'object',
+              required: ['id', 'locale', 'timezone', 'role', 'email', 'emailVerified', 'emailVerifiedAt'],
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                locale: { type: 'string' },
+                timezone: { type: 'string' },
+                role: { type: 'string', enum: ['user', 'admin'] },
+                email: { type: 'string', nullable: true },
+                emailVerified: { type: 'boolean' },
+                emailVerifiedAt: { type: 'string', format: 'date-time', nullable: true },
+              },
+            },
+            tasteProfile: { type: 'object', nullable: true, additionalProperties: true },
+          },
+        },
+      },
+    },
+  })
   async get(@CurrentUser() identity: AuthenticatedIdentity) {
     return { data: await this.currentUser.resolveById(identity.userId) };
   }

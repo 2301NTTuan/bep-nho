@@ -4,6 +4,7 @@ import {
 
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -622,6 +623,18 @@ export class PersonalizationService {
       );
 
     const persisted = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtextextended(${`recipe-publish:${recipe.id}`}, 0)
+        ) IS NULL AS locked
+      `;
+      const currentRecipe = await tx.recipe.findUnique({
+        where: { id: recipe.id },
+        select: { status: true },
+      });
+      if (currentRecipe?.status !== 'published') {
+        throw new ConflictException('Recipe is not currently published');
+      }
       const lockKey = `${userId}:${recipe.id}`;
 
       await tx.$queryRaw`
@@ -846,6 +859,18 @@ export class PersonalizationService {
     }
 
     const persisted = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtextextended(${`recipe-publish:${source.recipeId}`}, 0)
+        ) IS NULL AS locked
+      `;
+      const currentRecipe = await tx.recipe.findUnique({
+        where: { id: source.recipeId },
+        select: { status: true },
+      });
+      if (currentRecipe?.status !== 'published') {
+        throw new ConflictException('Recipe is not currently published');
+      }
       const lockKey = `${userId}:${source.recipeId}`;
       await tx.$queryRaw`
         SELECT pg_advisory_xact_lock(

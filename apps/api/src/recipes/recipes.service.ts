@@ -45,6 +45,7 @@ export class RecipesService {
             },
 
             take: 1,
+            include: { heroMediaAsset: { select: { id: true, width: true, height: true, status: true } } },
           },
         },
       });
@@ -89,6 +90,16 @@ export class RecipesService {
                   publishedAt:
                     latest
                       .publishedAt,
+
+                  heroMedia: latest.heroMediaAsset && latest.heroMediaAsset.status === 'active'
+                    ? {
+                        id: latest.heroMediaAsset.id,
+                        url: `/v1/media/${latest.heroMediaAsset.id}`,
+                        alt: latest.heroMediaAlt,
+                        width: latest.heroMediaAsset.width,
+                        height: latest.heroMediaAsset.height,
+                      }
+                    : null,
                 }
               : null,
           };
@@ -125,6 +136,7 @@ export class RecipesService {
             take: 1,
 
             include: {
+              heroMediaAsset: { select: { id: true, width: true, height: true, status: true } },
               ingredients: {
                 orderBy: {
                   sortOrder: 'asc',
@@ -192,6 +204,16 @@ export class RecipesService {
 
           publishedAt:
             version.publishedAt,
+
+          heroMedia: version.heroMediaAsset && version.heroMediaAsset.status === 'active'
+            ? {
+                id: version.heroMediaAsset.id,
+                url: `/v1/media/${version.heroMediaAsset.id}`,
+                alt: version.heroMediaAlt,
+                width: version.heroMediaAsset.width,
+                height: version.heroMediaAsset.height,
+              }
+            : null,
 
           ingredients:
             version.ingredients.map(

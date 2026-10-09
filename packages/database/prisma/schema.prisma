@@ -11,6 +11,7 @@ model User {
   id                      String                   @id @default(uuid()) @db.Uuid
   authSubject             String                   @unique @map("auth_subject") @db.VarChar(191)
   status                  String                   @default("active") @db.VarChar(24)
+  role                    String                   @default("user") @db.VarChar(16)
   locale                  String                   @default("vi-VN") @db.VarChar(16)
   timezone                String                   @default("Asia/Ho_Chi_Minh") @db.VarChar(64)
   createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -21,6 +22,10 @@ model User {
   authSessions            AuthSession[]
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
+  createdRecipeDrafts     RecipeDraft[]            @relation("RecipeDraftCreatedBy")
+  updatedRecipeDrafts     RecipeDraft[]            @relation("RecipeDraftUpdatedBy")
+  uploadedMediaAssets     MediaAsset[]             @relation("MediaAssetCreatedBy")
+  publishedRecipeVersions RecipeVersion[]          @relation("RecipeVersionPublishedBy")
 
   personalizedRecipeVersions      PersonalizedRecipeVersion[]
   personalizedAdjustmentDecisions PersonalizedAdjustmentDecision[]
@@ -97,21 +102,25 @@ model Recipe {
   personalizedRecipeVersions      PersonalizedRecipeVersion[]
   personalizedAdjustmentDecisions PersonalizedAdjustmentDecision[]
   userPreferences                 UserRecipePreference[]
+  drafts                          RecipeDraft[]
 
   @@index([status, canonicalTitle])
   @@map("recipes")
 }
 
 model RecipeVersion {
-  id              String    @id @default(uuid()) @db.Uuid
-  recipeId        String    @map("recipe_id") @db.Uuid
-  versionNo       Int       @map("version_no")
-  servings        Decimal   @db.Decimal(6, 2)
-  prepTimeMinutes Int?      @map("prep_time_minutes")
-  cookTimeMinutes Int?      @map("cook_time_minutes")
-  summary         String?
-  contentHash     String    @map("content_hash") @db.VarChar(64)
-  publishedAt     DateTime? @map("published_at") @db.Timestamptz(6)
+  id                String    @id @default(uuid()) @db.Uuid
+  recipeId          String    @map("recipe_id") @db.Uuid
+  versionNo         Int       @map("version_no")
+  servings          Decimal   @db.Decimal(6, 2)
+  prepTimeMinutes   Int?      @map("prep_time_minutes")
+  cookTimeMinutes   Int?      @map("cook_time_minutes")
+  summary           String?
+  contentHash       String    @map("content_hash") @db.VarChar(64)
+  publishedAt       DateTime? @map("published_at") @db.Timestamptz(6)
+  heroMediaAssetId  String?   @map("hero_media_asset_id") @db.Uuid
+  heroMediaAlt      String?   @map("hero_media_alt") @db.VarChar(320)
+  publishedByUserId String?   @map("published_by_user_id") @db.Uuid
 
   recipe       Recipe             @relation(fields: [recipeId], references: [id], onDelete: Cascade)
   ingredients  RecipeIngredient[]
@@ -121,10 +130,58 @@ model RecipeVersion {
   adjustmentRules RecipeAdjustmentRule[]
 
   personalizedVersions PersonalizedRecipeVersion[]
+  heroMediaAsset       MediaAsset?                 @relation(fields: [heroMediaAssetId], references: [id], onDelete: Restrict)
+  publishedBy          User?                       @relation("RecipeVersionPublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
+  basedDrafts          RecipeDraft[]               @relation("RecipeDraftBaseVersion")
 
   @@unique([recipeId, versionNo])
   @@index([recipeId, publishedAt])
+  @@index([heroMediaAssetId])
+  @@index([publishedByUserId])
   @@map("recipe_versions")
+}
+
+model RecipeDraft {
+  id                  String         @id @default(uuid()) @db.Uuid
+  recipeId            String         @map("recipe_id") @db.Uuid
+  baseRecipeVersionId String?        @map("base_recipe_version_id") @db.Uuid
+  status              String         @default("draft") @db.VarChar(24)
+  revision            Int            @default(1)
+  contentJson         Json           @map("content_json")
+  createdByUserId     String?        @map("created_by_user_id") @db.Uuid
+  updatedByUserId     String?        @map("updated_by_user_id") @db.Uuid
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  recipe              Recipe         @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  baseRecipeVersion   RecipeVersion? @relation("RecipeDraftBaseVersion", fields: [baseRecipeVersionId], references: [id], onDelete: SetNull)
+  createdBy           User?          @relation("RecipeDraftCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedBy           User?          @relation("RecipeDraftUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([recipeId, status, updatedAt])
+  @@index([baseRecipeVersionId])
+  @@index([createdByUserId])
+  @@index([updatedByUserId])
+  @@map("recipe_drafts")
+}
+
+model MediaAsset {
+  id              String          @id @default(uuid()) @db.Uuid
+  objectKey       String          @unique @map("object_key") @db.VarChar(255)
+  sha256          String          @db.Char(64)
+  mimeType        String          @map("mime_type") @db.VarChar(64)
+  byteSize        Int             @map("byte_size")
+  width           Int?
+  height          Int?
+  status          String          @default("active") @db.VarChar(24)
+  createdByUserId String?         @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy       User?           @relation("MediaAssetCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  recipeVersions  RecipeVersion[]
+
+  @@index([status, createdAt])
+  @@index([createdByUserId])
+  @@index([sha256])
+  @@map("media_assets")
 }
 
 model CookSession {

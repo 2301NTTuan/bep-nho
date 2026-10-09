@@ -8,6 +8,10 @@ coverage/
 .turbo/
 *.log
 .DS_Store
+playwright-report/
+test-results/
+backups/
+*.dump
 
 # TypeScript incremental build cache
 *.tsbuildinfo

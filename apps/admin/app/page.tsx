@@ -1,1 +1,3 @@
-export default function Admin(){return <main><h1>Bếp Nhớ Admin</h1><p>CMS / Moderation / Operations.</p></main>}
+import { redirect } from 'next/navigation';
+
+export default function Admin() { redirect('/recipes'); }

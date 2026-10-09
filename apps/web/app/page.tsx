@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ApiRequestError, apiRequest, getErrorMessage } from '../lib/api';
+import { API_BASE, ApiRequestError, apiRequest, getErrorMessage } from '../lib/api';
 import { establishDevelopmentSession, loadCurrentUser, logoutCurrentUser } from '../lib/current-user';
 import type { CurrentUserContext } from '../lib/current-user';
 import type { ActiveCookSessionResponse, RecipeListResponse } from '../lib/types';
@@ -187,7 +187,9 @@ export default function Home() {
                 <Link key={recipe.id} href={`/recipes/${recipe.slug}`} className="recipeCard">
                   <div className={`recipeVisual tone${(index % 3) + 1}`}>
                     <span className="recipeIndex">0{index + 1}</span>
-                    <span className="bowl" aria-hidden="true"><i /><i /><i /></span>
+                    {version?.heroMedia
+                      ? <img className="recipeImage" src={`${API_BASE.replace(/\/v1$/, '')}${version.heroMedia.url}`} alt={version.heroMedia.alt ?? recipe.title} />
+                      : <span className="bowl" aria-hidden="true"><i /><i /><i /></span>}
                     <span className="pill lightPill">Món Việt</span>
                   </div>
                   <div className="recipeBody">

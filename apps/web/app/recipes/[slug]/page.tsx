@@ -9,7 +9,7 @@ import {
   scaleIngredientQuantity,
   selectDefaultPersonalizedVersion,
 } from '@bep-nho/domain';
-import { ApiRequestError, apiRequest, getErrorMessage } from '../../../lib/api';
+import { API_BASE, ApiRequestError, apiRequest, getErrorMessage } from '../../../lib/api';
 import { loadCurrentUser } from '../../../lib/current-user';
 import type { CurrentUserContext } from '../../../lib/current-user';
 import type {
@@ -251,7 +251,7 @@ export default function RecipePage() {
           </div>
           {error && <div className="inlineError" role="alert">{error}</div>}
         </div>
-        <aside className="detailVisual"><span className="heroBowl" aria-hidden="true"><i /><i /><i /></span><div className="versionSeal"><small>{personalized ? 'Phiên bản của bạn' : 'Phiên bản chuẩn'}</small><strong>V{personalized?.versionNo ?? base.versionNo}</strong></div></aside>
+        <aside className="detailVisual">{base.heroMedia ? <img className="detailHeroImage" src={`${API_BASE.replace(/\/v1$/, '')}${base.heroMedia.url}`} alt={base.heroMedia.alt ?? recipe.data.title} /> : <span className="heroBowl" aria-hidden="true"><i /><i /><i /></span>}<div className="versionSeal"><small>{personalized ? 'Phiên bản của bạn' : 'Phiên bản chuẩn'}</small><strong>V{personalized?.versionNo ?? base.versionNo}</strong></div></aside>
       </section>
 
       {personalized && <section className="personalizationBanner"><div><div className="smallLabel light">{activeLabel}</div><h2>{adjustments.length > 0 ? `${adjustments.length} nguyên liệu được tinh chỉnh` : 'Công thức đang hợp khẩu vị của bạn'}</h2><p>Gợi ý mới không tự thay “Bản tốt nhất”; phiên nấu luôn dùng đúng version bạn chọn.</p></div><div className="versionChoices">{versionChoices.map((choice) => <button key={choice.version.id} type="button" disabled={busy || choice.version.id === personalized.id} onClick={() => { setPersonalized(choice.version); setServings(choice.version.snapshot.servings); }}>{choice.label} · V{choice.version.versionNo}</button>)}{best?.id === personalized.id ? <button type="button" disabled={busy} onClick={() => void unpinBest()}>Bỏ ghim bản tốt nhất</button> : <button type="button" disabled={busy} onClick={() => void pinBest(personalized)}>Lưu làm bản tốt nhất</button>}</div><button className="textButton" type="button" disabled={busy} onClick={() => void createPersonalized()}>Làm mới gợi ý theo Taste DNA</button></section>}

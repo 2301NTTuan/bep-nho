@@ -74,6 +74,8 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 3px sol
 .recipeGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
 .recipeCard { overflow: hidden; border: 1px solid var(--line); border-radius: 22px; background: var(--white); transition: transform .2s ease, box-shadow .2s ease; }
 .recipeCard:hover { transform: translateY(-5px); box-shadow: var(--shadow); }
+.recipeImage { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.detailHeroImage { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .recipeVisual { position: relative; display: grid; min-height: 205px; place-items: center; overflow: hidden; background: #7b3829; }
 .recipeVisual.tone2 { background: #496649; }
 .recipeVisual.tone3 { background: #765027; }

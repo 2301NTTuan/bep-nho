@@ -1,6 +1,6 @@
 # Bếp Nhớ MVP review
 
-Date: 2026-10-08
+Date: 2026-10-09
 
 ## Current MVP readiness
 
@@ -13,25 +13,26 @@ The core differentiating loop is implemented and integration-tested:
 5. deterministically create or reuse a bounded personalized version;
 6. keep every historical cook session bound to the version actually cooked.
 
-The web experience now presents this loop coherently on desktop and mobile. It is suitable for guided development demos and a small internal alpha. It is not ready for public production traffic yet.
+The web experience now presents this loop coherently on desktop and mobile, and a real Chromium flow exercises the product loop against PostgreSQL and Redis. The repository has the engineering baseline for a serious internal or carefully controlled public alpha, but it is not ready for unrestricted public production traffic.
 
 ## Remaining product gaps
 
 - First-party email/password sign-in, revocable cookie sessions, `/v1/me`, and object-level ownership checks are now implemented. Account lifecycle remains incomplete: email verification, password reset, MFA, device/session management, and account deletion are not yet available.
 - The internal alpha now has 13 structured Vietnamese home recipes, but they remain explicitly experimental and still need human culinary/editorial review plus production media/workflow.
 - Serving selection supports deterministic ingredient-aware scaling for 1–8 portions, with conservative/fixed modes and practical rounding. Broader culinary calibration still needs editorial testing.
-- Cook Mode now resumes from an immutable server snapshot, persists real timer/progress events, and queues progress briefly offline. Browser E2E, timer pause, multi-device conflict UX, and offline feedback/completion remain open.
+- Cook Mode now resumes from an immutable server snapshot, persists real timer/progress events, and queues progress briefly offline. The happy path has browser E2E coverage; timer pause, multi-device conflict UX, multi-tab sequencing, and offline feedback/completion remain open.
 - Users can now explicitly accept, reject, or bounded-edit adjusted ingredients, and can pin one immutable “My Best Version” per recipe. Broader version-library comparison and bulk review remain future UX work.
 - Taste DNA now has a private history/control screen with deterministic explanations, manual overrides, and per-dimension reset. Cross-device live refresh and export are not included.
-- The web now has real login/register/logout flows and keeps public recipe browsing available while signed out. Deployment still needs verified same-site cookie/origin configuration and abuse controls.
+- The web now has real login/register/logout flows and keeps public recipe browsing available while signed out. Cookie/Origin behavior and Redis-backed auth abuse controls are verified locally; an actual production ingress, secret store, TLS/cookie domain, monitoring, and deployment remain environment work.
 
 ## Architectural debt and operational gaps
 
-- API contracts are shared TypeScript definitions, not generated from an OpenAPI source of truth.
+- API contracts retain shared TypeScript definitions and now also publish a deterministic OpenAPI 3 artifact/route with CI drift detection. Client generation is intentionally deferred.
 - Scaling, cook progress, timer restoration, sequencing, queue reconciliation, Taste replay, and effective override semantics now have pure domain utilities. HTTP orchestration and deterministic explanation copy remain in NestJS services.
-- User-owned APIs now have session guards, 404 ownership semantics, Origin checks, and focused security tests. Retry idempotency beyond the hardened cooking paths, login throttling/rate limits, and broader audit controls remain open.
-- The integration suite covers concurrency, provenance, and the domain loop; focused HTTP tests cover standardized conflicts and development-route isolation. Browser accessibility/responsive automation is still missing.
-- There is no production observability baseline (structured logs, metrics, traces, error reporting) or CI workflow enforcing all gates.
+- User-owned APIs now have session guards, 404 ownership semantics, Origin checks, focused security tests, and independent Redis-backed login/register limits. Retry idempotency beyond the hardened cooking paths and broader audit controls remain open.
+- The integration suite covers concurrency, provenance, and the domain loop; focused HTTP tests cover the production bootstrap/security surface. Playwright plus axe covers the core desktop flow and important pages; responsive/mobile and broader WCAG/manual review remain open.
+- GitHub Actions now defines static, integration, E2E, and pull-request dependency-review jobs. Structured JSON logs, bounded request IDs, normalized Prometheus HTTP metrics, and PostgreSQL/Redis readiness form a modest baseline; tracing and an external error/metrics/log backend remain deployment work. The production audit's remaining high advisory is confined to Prisma 6.19.3 configuration tooling and is explicitly tracked rather than hidden by an unsafe transitive-major override.
+- Backup/restore/session-maintenance scripts and a deployment runbook now exist, with a successful local restore into a disposable PostgreSQL database. Off-host scheduling, encryption, retention enforcement, alerting, and disaster-recovery exercises remain operator responsibilities.
 - Admin is only a skeleton; content publication currently depends on database seeds.
 
 ## Recommended next phases
@@ -50,7 +51,7 @@ Completed 2026-10-08: private Taste DNA history/explanations, append-only manual
 
 ### Phase 9 — Delivery quality and operations
 
-Add OpenAPI generation, HTTP/browser/a11y tests, CI gates, structured observability, rate limiting, backup/restore checks, and an environment/deployment runbook.
+Completed 2026-10-09: deterministic OpenAPI generation/drift checks, production-mode HTTP tests, Playwright/axe core-loop coverage, reproducible GitHub Actions jobs, Redis-backed auth throttling, Helmet/proxy/request-ID hardening, JSON logs/Prometheus metrics, liveness/readiness, verified custom-format backup/restore scripts, safe session cleanup, and `docs/RUNBOOK.md`. The workflow is configured, but its remote GitHub Actions result must not be called passing until a completed run is observed.
 
 Do not begin social, pantry, household, or monetization domains before Phases 6–9 establish safe ownership, reliable Cook Mode, user control, and production operations.
 
@@ -69,7 +70,7 @@ Do not begin social, pantry, household, or monetization domains before Phases 6�
 - Opaque cookie sessions enforce expiry, revocation, and active-user status; production cookies are HttpOnly, SameSite=Lax, Path=/, and Secure.
 - All cook, feedback, Taste DNA, and personalization ownership is derived from the authenticated session. Foreign resources return 404, and legacy user-ID routes are gone.
 - Stateful browser requests enforce configured origins, while credentialed CORS never emits a wildcard origin.
-- Remaining production blockers are account recovery/verification, abuse protection, deployment/operations hardening, human culinary review/editorial workflow, user control over learning, and browser accessibility/E2E coverage.
+- Remaining production blockers are account recovery/verification, real production infrastructure/secret/TLS/monitoring configuration, human culinary/editorial review, multi-tab/event conflict UX, and broader accessibility/security/operational review. Phase 8 supplied user control; Phase 9 supplied baseline abuse protection and delivery operations.
 
 ## Phase 7 cooking reliability completed
 
@@ -90,3 +91,13 @@ Do not begin social, pantry, household, or monetization domains before Phases 6�
 - ACCEPT records a decision without minting content; REJECT and bounded EDIT create or reuse immutable effective-content snapshots. Source versions never change, and user-derived versions retain canonical/taste provenance plus explicit parent/origin metadata.
 - Latest engine suggestion, latest version of any origin, and “My Best Version” are separate concepts. Pin/unpin never creates a version, a later suggestion never moves the pin, and CookSession stores the exact selected version snapshot.
 - Current-user guards, exact-Origin mutation protection, foreign-object 404 behavior, append-only decision/control logs, concurrency locks, and effective-content hash reuse are covered by PostgreSQL and HTTP regressions.
+
+## Phase 9 delivery quality and operations completed
+
+- `.github/workflows/ci.yml` runs frozen-install static/OpenAPI/build checks, PostgreSQL+Redis integration tests, seeded production-build Playwright/axe E2E, and high-severity dependency review for pull requests. Failure artifacts contain screenshots/reports, not traces, video, dumps, or auth material.
+- `GET /v1/openapi.json` and `docs/openapi/openapi.json` expose the documented cookie-auth HTTP surface without restoring removed user-ID routes. `pnpm openapi:check` detects drift.
+- Login and registration use separate configurable Redis counters keyed by normalized endpoint and Express-resolved client IP. Direct deployment trusts no forwarded IP; proxy trust is explicit. Limits return generic 429 responses with `Retry-After` and fail closed if Redis is unavailable.
+- Helmet headers, production HSTS, exact credentialed CORS/Origin behavior, bounded request IDs, JSON Pino request/error logs, and low-cardinality Prometheus metrics establish the API security/observability baseline without logging credentials or private feedback.
+- Liveness is dependency-free. Readiness and the legacy health alias require PostgreSQL and Redis, but not currently unused MinIO, and return 503 when degraded.
+- `scripts/ops/` creates custom-format dumps, blocks unsafe restores and PostgreSQL client/server major mismatches, verifies restores in a disposable database, and performs dry-run-first expired/revoked session cleanup. `docs/RUNBOOK.md` documents release, diagnostics, forward-only migrations, rollback versus recovery, and prohibited shortcuts.
+- Remaining limitations are account verification/recovery/MFA/deletion, human culinary review and content publication workflow, real hosting/monitoring/backup scheduling, remediation of the tracked Prisma-tooling dependency advisory, broader responsive/accessibility/security review, multi-tab conflict coordination, and the product gaps listed above.

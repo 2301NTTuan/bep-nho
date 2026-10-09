@@ -9,6 +9,7 @@ import { SessionAuthGuard } from './auth/session-auth.guard';
 import { SessionCookieService } from './auth/cookies';
 import { CurrentUserService } from './identity/current-user.service';
 import { ApiExceptionFilter } from './http/api-exception.filter';
+import { DevelopmentMailOutbox } from './auth/mail-delivery.service';
 
 const currentUser = {
   resolveByAuthSubject: jest.fn().mockResolvedValue({
@@ -29,6 +30,10 @@ const cookies = {
   set: jest.fn(),
 };
 
+const mailOutbox = {
+  latest: jest.fn().mockReturnValue(null),
+};
+
 function randomUuid() {
   return '00000000-0000-4000-8000-000000000001';
 }
@@ -39,6 +44,7 @@ function randomUuid() {
     { provide: CurrentUserService, useValue: currentUser },
     { provide: AuthService, useValue: auth },
     { provide: SessionCookieService, useValue: cookies },
+    { provide: DevelopmentMailOutbox, useValue: mailOutbox },
     { provide: ConfigService, useValue: { get: () => 'development' } },
   ],
 })
@@ -50,6 +56,7 @@ class DevelopmentDevModule {}
     { provide: CurrentUserService, useValue: currentUser },
     { provide: AuthService, useValue: auth },
     { provide: SessionCookieService, useValue: cookies },
+    { provide: DevelopmentMailOutbox, useValue: mailOutbox },
     { provide: ConfigService, useValue: { get: () => 'production' } },
   ],
 })
@@ -118,6 +125,18 @@ describe('HTTP hardening behavior', () => {
     const server = await start(ProductionDevModule);
     apps.push(server.app);
     const response = await fetch(`${server.base}/dev/session`, { method: 'POST' });
+    expect(response.status).toBe(404);
+    expect((await response.json()) as object).toMatchObject({
+      error: { code: 'NOT_FOUND' },
+    });
+  });
+
+  it('returns standardized 404 for the development mail outbox in production', async () => {
+    const server = await start(ProductionDevModule);
+    apps.push(server.app);
+    const response = await fetch(
+      `${server.base}/dev/mail-outbox/latest?email=test@example.com&type=email_verification`,
+    );
     expect(response.status).toBe(404);
     expect((await response.json()) as object).toMatchObject({
       error: { code: 'NOT_FOUND' },

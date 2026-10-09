@@ -60,6 +60,8 @@ describe('Phase 9 operations and security', () => {
       REDIS_URL: 'redis://127.0.0.1:6379',
       AUTH_RATE_LIMIT_LOGIN_POINTS: 2,
       AUTH_RATE_LIMIT_REGISTER_POINTS: 1,
+      AUTH_RATE_LIMIT_LIFECYCLE_REQUEST_POINTS: 1,
+      AUTH_RATE_LIMIT_LIFECYCLE_CONFIRM_POINTS: 1,
       AUTH_RATE_LIMIT_WINDOW_SECONDS: 2,
       METRICS_ENABLED: true,
     });
@@ -77,6 +79,12 @@ describe('Phase 9 operations and security', () => {
       });
       await expect(limiter.consume('register', key)).resolves.toBeUndefined();
       await expect(limiter.consume('register', key)).rejects.toBeInstanceOf(HttpException);
+      await expect(limiter.consume('email_verification_request', key)).resolves.toBeUndefined();
+      await expect(limiter.consume('email_verification_request', key))
+        .rejects.toBeInstanceOf(HttpException);
+      await expect(limiter.consume('password_reset_request', key)).resolves.toBeUndefined();
+      await expect(limiter.consume('email_verification_confirm', key)).resolves.toBeUndefined();
+      await expect(limiter.consume('password_reset_confirm', key)).resolves.toBeUndefined();
       expect(await metrics.registry.getSingleMetricAsString(
         'bep_nho_auth_rate_limit_rejections_total',
       )).toContain('endpoint="login"');
@@ -91,6 +99,8 @@ describe('Phase 9 operations and security', () => {
       REDIS_URL: 'redis://127.0.0.1:6399',
       AUTH_RATE_LIMIT_LOGIN_POINTS: 2,
       AUTH_RATE_LIMIT_REGISTER_POINTS: 1,
+      AUTH_RATE_LIMIT_LIFECYCLE_REQUEST_POINTS: 1,
+      AUTH_RATE_LIMIT_LIFECYCLE_CONFIRM_POINTS: 1,
       AUTH_RATE_LIMIT_WINDOW_SECONDS: 1,
       METRICS_ENABLED: false,
     });
@@ -113,6 +123,10 @@ describe('Phase 9 operations and security', () => {
     expect(document.openapi).toMatch(/^3\./);
     const required = [
       '/v1/auth/register', '/v1/auth/login', '/v1/auth/logout', '/v1/me',
+      '/v1/auth/email-verification/request', '/v1/auth/email-verification/confirm',
+      '/v1/auth/password-reset/request', '/v1/auth/password-reset/confirm',
+      '/v1/me/password', '/v1/me/sessions', '/v1/me/sessions/{sessionId}',
+      '/v1/me/sessions/revoke-others', '/v1/me/account',
       '/v1/recipes', '/v1/recipes/{slug}', '/v1/cook-sessions',
       '/v1/cook-sessions/{id}', '/v1/cook-sessions/{id}/events',
       '/v1/cook-sessions/{id}/complete', '/v1/cook-sessions/{id}/feedback',
@@ -129,6 +143,7 @@ describe('Phase 9 operations and security', () => {
     ];
     for (const route of required) expect(document.paths).toHaveProperty(route);
     expect(Object.keys(document.paths).some((route) => route.includes('/users/'))).toBe(false);
+    expect(Object.keys(document.paths).some((route) => route.includes('/dev/'))).toBe(false);
     expect(document.components.securitySchemes).toHaveProperty('sessionCookie');
   });
 });

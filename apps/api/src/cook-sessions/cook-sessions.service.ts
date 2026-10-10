@@ -23,9 +23,13 @@ type SessionView = Prisma.CookSessionGetPayload<{
   include: {
     recipeVersion: { include: typeof versionInclude };
     personalizedRecipeVersion: true;
+    householdPersonalizedRecipeVersion: true;
     events: true;
   };
 }>;
+
+type PersonalizationSource = NonNullable<SessionView['personalizedRecipeVersion']>
+  | NonNullable<SessionView['householdPersonalizedRecipeVersion']>;
 
 function asRecord(value: Prisma.JsonValue): Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -44,7 +48,8 @@ export class CookSessionsService {
   private buildSnapshot(
     base: BaseVersion,
     targetServings: number,
-    personalized: SessionView['personalizedRecipeVersion'] | null,
+    personalized: PersonalizationSource | null,
+    householdId: string | null = null,
     legacyFallback = false,
   ): CookSnapshot {
     const personalizedSnapshot = personalized
@@ -136,7 +141,11 @@ export class CookSessionsService {
       },
       canonicalVersion: { id: base.id, versionNo: base.versionNo, servings: Number(base.servings) },
       personalizedVersion: personalized
+        && householdId === null
         ? { id: personalized.id, versionNo: personalized.versionNo, algorithmVersion: personalized.algorithmVersion }
+        : null,
+      householdPersonalizedVersion: personalized && householdId
+        ? { id: personalized.id, versionNo: personalized.versionNo, algorithmVersion: personalized.algorithmVersion, householdId }
         : null,
       servings: targetServings,
       prepTimeMinutes: numberOr(personalizedSnapshot.prepTimeMinutes, base.prepTimeMinutes ?? 0) || null,
@@ -162,13 +171,15 @@ export class CookSessionsService {
     return this.buildSnapshot(
       session.recipeVersion,
       Number(session.servings),
-      session.personalizedRecipeVersion,
+      session.personalizedRecipeVersion ?? session.householdPersonalizedRecipeVersion,
+      session.householdPersonalizedRecipeVersion?.householdId ?? null,
       true,
     );
   }
 
   private serializeSession(session: SessionView) {
     const personalized = session.personalizedRecipeVersion;
+    const household = session.householdPersonalizedRecipeVersion;
     return {
       data: {
         id: session.id,
@@ -182,12 +193,14 @@ export class CookSessionsService {
           id: session.recipeVersion.recipe.id,
           slug: session.recipeVersion.recipe.slug,
           title: this.snapshotFor(session).recipe.title,
-          source: personalized ? 'personalized' : 'canonical',
+          source: household ? 'household' : personalized ? 'personalized' : 'canonical',
           versionId: session.recipeVersion.id,
           versionNo: session.recipeVersion.versionNo,
           personalizedVersionId: personalized?.id ?? null,
           personalizedVersionNo: personalized?.versionNo ?? null,
           personalizationAlgorithm: personalized?.algorithmVersion ?? null,
+          householdPersonalizedVersionId: household?.id ?? null,
+          householdPersonalizedVersionNo: household?.versionNo ?? null,
         },
         snapshot: this.snapshotFor(session),
         events: [...session.events]
@@ -211,6 +224,7 @@ export class CookSessionsService {
       include: {
         recipeVersion: { include: versionInclude },
         personalizedRecipeVersion: true,
+        householdPersonalizedRecipeVersion: true,
         events: { orderBy: { clientSeq: 'asc' } },
       },
     });
@@ -224,8 +238,30 @@ export class CookSessionsService {
 
     let base: BaseVersion;
     let personalized: SessionView['personalizedRecipeVersion'] | null = null;
+    let householdPersonalized: SessionView['householdPersonalizedRecipeVersion'] | null = null;
 
-    if (dto.personalizedRecipeVersionId) {
+    if (dto.personalizedRecipeVersionId && dto.householdPersonalizedRecipeVersionId) {
+      throw new BadRequestException('Choose either a personal or household personalized version.');
+    }
+
+    if (dto.householdPersonalizedRecipeVersionId) {
+      const found = await this.prisma.householdPersonalizedRecipeVersion.findUnique({
+        where: { id: dto.householdPersonalizedRecipeVersionId },
+        include: { baseRecipeVersion: { include: versionInclude }, recipe: true, household: true },
+      });
+      const membership = found
+        ? await this.prisma.householdMember.findUnique({ where: { userId } })
+        : null;
+      if (!found || !membership || membership.householdId !== found.householdId || found.household.status !== 'active') {
+        throw new NotFoundException('Household personalized recipe version was not found');
+      }
+      if (found.recipe.slug !== dto.recipeSlug) {
+        throw new BadRequestException('Household personalized recipe version does not belong to the requested recipe');
+      }
+      if (found.recipe.status !== 'published') throw new ConflictException('Recipe is not currently published');
+      householdPersonalized = found;
+      base = found.baseRecipeVersion;
+    } else if (dto.personalizedRecipeVersionId) {
       const found = await this.prisma.personalizedRecipeVersion.findUnique({
         where: { id: dto.personalizedRecipeVersionId },
         include: { baseRecipeVersion: { include: versionInclude }, recipe: true },
@@ -259,12 +295,13 @@ export class CookSessionsService {
       base = recipe.versions[0];
     }
 
-    const personalizedData = personalized ? asRecord(personalized.snapshotJson) : {};
-    const sourceServings = personalized
+    const personalizationSource = personalized ?? householdPersonalized;
+    const personalizedData = personalizationSource ? asRecord(personalizationSource.snapshotJson) : {};
+    const sourceServings = personalizationSource
       ? numberOr(personalizedData.servings, Number(base.servings))
       : Number(base.servings);
     const servings = dto.servings ?? sourceServings;
-    const snapshot = this.buildSnapshot(base, servings, personalized);
+    const snapshot = this.buildSnapshot(base, servings, personalizationSource, householdPersonalized?.householdId ?? null);
     const startedAt = new Date();
 
     const session = await this.prisma.$transaction(async (tx) => {
@@ -280,11 +317,18 @@ export class CookSessionsService {
       if (currentRecipe?.status !== 'published') {
         throw new ConflictException('Recipe is not currently published');
       }
+      if (householdPersonalized) {
+        const activeMembership = await tx.householdMember.findUnique({ where: { userId } });
+        if (!activeMembership || activeMembership.householdId !== householdPersonalized.householdId) {
+          throw new NotFoundException('Household personalized recipe version was not found');
+        }
+      }
       const created = await tx.cookSession.create({
         data: {
           userId: user.id,
           recipeVersionId: base.id,
           personalizedRecipeVersionId: personalized?.id ?? null,
+          householdPersonalizedRecipeVersionId: householdPersonalized?.id ?? null,
           status: 'started',
           servings,
           syncVersion: 1,
@@ -302,10 +346,12 @@ export class CookSessionsService {
           payload: {
             recipeId: base.recipe.id,
             recipeSlug: base.recipe.slug,
-            recipeSource: personalized ? 'personalized' : 'canonical',
+            recipeSource: householdPersonalized ? 'household' : personalized ? 'personalized' : 'canonical',
             baseRecipeVersion: base.versionNo,
             personalizedRecipeVersion: personalized?.versionNo ?? null,
             personalizedRecipeVersionId: personalized?.id ?? null,
+            householdPersonalizedRecipeVersion: householdPersonalized?.versionNo ?? null,
+            householdPersonalizedRecipeVersionId: householdPersonalized?.id ?? null,
             servings,
           },
           schemaVersion: 1,
@@ -327,6 +373,7 @@ export class CookSessionsService {
       include: {
         recipeVersion: { include: versionInclude },
         personalizedRecipeVersion: true,
+        householdPersonalizedRecipeVersion: true,
         events: { orderBy: { clientSeq: 'asc' } },
       },
     });

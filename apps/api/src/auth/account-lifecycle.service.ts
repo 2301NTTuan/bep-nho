@@ -14,6 +14,7 @@ import { MailDeliveryService } from './mail-delivery.service';
 import { createOpaqueToken, hashOpaqueToken } from './opaque-token';
 import { PasswordService } from './password.service';
 import { AccountLifecycleLockService } from './account-lifecycle-lock.service';
+import { HouseholdLockService } from '../database/household-lock.service';
 
 const GENERIC_REQUEST_RESULT = { accepted: true } as const;
 
@@ -26,6 +27,7 @@ export class AccountLifecycleService {
     private readonly passwords: PasswordService,
     private readonly mail: MailDeliveryService,
     private readonly lifecycleLock: AccountLifecycleLockService,
+    private readonly householdLock: HouseholdLockService,
   ) {}
 
   async requestEmailVerification(email: string) {
@@ -209,10 +211,30 @@ export class AccountLifecycleService {
 
   async deleteAccount(userId: string, password: string) {
     await this.prisma.$transaction(async (tx) => {
+      // Global lock order for deletion: account-lifecycle lock, then household lock.
       await this.lifecycleLock.acquire(tx, userId, 'account_delete');
       const credential = await tx.userCredential.findUnique({ where: { userId } });
       if (!credential || !(await this.passwords.verify(password, credential.passwordHash))) {
         throw new UnauthorizedException('Password confirmation failed.');
+      }
+      const membership = await tx.householdMember.findUnique({ where: { userId } });
+      if (membership) {
+        await this.householdLock.acquire(tx, membership.householdId, 'account_delete');
+        const current = await tx.householdMember.findUnique({ where: { userId } });
+        if (current?.householdId === membership.householdId && current.role === 'owner') {
+          const successor = await tx.householdMember.findFirst({
+            where: { householdId: current.householdId, userId: { not: userId } },
+            orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }],
+          });
+          await tx.householdMember.delete({ where: { id: current.id } });
+          if (successor) {
+            await tx.householdMember.update({ where: { id: successor.id }, data: { role: 'owner' } });
+            this.logger.log('Household event: owner transferred during account deletion');
+          } else {
+            await tx.household.update({ where: { id: current.householdId }, data: { status: 'closed' } });
+            this.logger.log('Household event: last-owner household closed during account deletion');
+          }
+        }
       }
       await tx.user.delete({ where: { id: userId } });
     });

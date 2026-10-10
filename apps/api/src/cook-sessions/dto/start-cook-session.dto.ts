@@ -22,6 +22,11 @@ export class StartCookSessionDto {
   @IsUUID()
   personalizedRecipeVersionId?: string;
 
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  householdPersonalizedRecipeVersionId?: string;
+
   @ApiPropertyOptional({ minimum: 1, maximum: 8 })
   @IsOptional()
   @IsInt()

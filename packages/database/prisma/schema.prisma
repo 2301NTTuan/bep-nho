@@ -26,6 +26,8 @@ model User {
   updatedRecipeDrafts     RecipeDraft[]            @relation("RecipeDraftUpdatedBy")
   uploadedMediaAssets     MediaAsset[]             @relation("MediaAssetCreatedBy")
   publishedRecipeVersions RecipeVersion[]          @relation("RecipeVersionPublishedBy")
+  householdMembership     HouseholdMember?
+  createdHouseholdInvites HouseholdInvite[]        @relation("HouseholdInviteCreatedBy")
 
   personalizedRecipeVersions      PersonalizedRecipeVersion[]
   personalizedAdjustmentDecisions PersonalizedAdjustmentDecision[]
@@ -91,18 +93,19 @@ model AuthSession {
 }
 
 model Recipe {
-  id                              String                           @id @default(uuid()) @db.Uuid
-  slug                            String                           @unique @db.VarChar(180)
-  canonicalTitle                  String                           @map("canonical_title") @db.VarChar(180)
-  status                          String                           @default("draft") @db.VarChar(24)
-  cuisine                         String                           @default("vietnamese") @db.VarChar(64)
-  createdAt                       DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                       DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                              String                               @id @default(uuid()) @db.Uuid
+  slug                            String                               @unique @db.VarChar(180)
+  canonicalTitle                  String                               @map("canonical_title") @db.VarChar(180)
+  status                          String                               @default("draft") @db.VarChar(24)
+  cuisine                         String                               @default("vietnamese") @db.VarChar(64)
+  createdAt                       DateTime                             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                       DateTime                             @updatedAt @map("updated_at") @db.Timestamptz(6)
   versions                        RecipeVersion[]
   personalizedRecipeVersions      PersonalizedRecipeVersion[]
   personalizedAdjustmentDecisions PersonalizedAdjustmentDecision[]
   userPreferences                 UserRecipePreference[]
   drafts                          RecipeDraft[]
+  householdPersonalizedVersions   HouseholdPersonalizedRecipeVersion[]
 
   @@index([status, canonicalTitle])
   @@map("recipes")
@@ -129,10 +132,11 @@ model RecipeVersion {
 
   adjustmentRules RecipeAdjustmentRule[]
 
-  personalizedVersions PersonalizedRecipeVersion[]
-  heroMediaAsset       MediaAsset?                 @relation(fields: [heroMediaAssetId], references: [id], onDelete: Restrict)
-  publishedBy          User?                       @relation("RecipeVersionPublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
-  basedDrafts          RecipeDraft[]               @relation("RecipeDraftBaseVersion")
+  personalizedVersions          PersonalizedRecipeVersion[]
+  householdPersonalizedVersions HouseholdPersonalizedRecipeVersion[]
+  heroMediaAsset                MediaAsset?                          @relation(fields: [heroMediaAssetId], references: [id], onDelete: Restrict)
+  publishedBy                   User?                                @relation("RecipeVersionPublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
+  basedDrafts                   RecipeDraft[]                        @relation("RecipeDraftBaseVersion")
 
   @@unique([recipeId, versionNo])
   @@index([recipeId, publishedAt])
@@ -185,25 +189,95 @@ model MediaAsset {
 }
 
 model CookSession {
-  id                          String                     @id @default(uuid()) @db.Uuid
-  userId                      String                     @map("user_id") @db.Uuid
-  recipeVersionId             String                     @map("recipe_version_id") @db.Uuid
-  personalizedRecipeVersionId String?                    @map("personalized_recipe_version_id") @db.Uuid
-  status                      String                     @default("started") @db.VarChar(24)
-  servings                    Decimal                    @db.Decimal(6, 2)
-  syncVersion                 Int                        @default(1) @map("sync_version")
-  snapshotJson                Json?                      @map("snapshot_json")
-  startedAt                   DateTime                   @default(now()) @map("started_at") @db.Timestamptz(6)
-  completedAt                 DateTime?                  @map("completed_at") @db.Timestamptz(6)
-  user                        User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recipeVersion               RecipeVersion              @relation(fields: [recipeVersionId], references: [id])
-  personalizedRecipeVersion   PersonalizedRecipeVersion? @relation(fields: [personalizedRecipeVersionId], references: [id], onDelete: SetNull)
-  feedback                    CookFeedback?
-  events                      CookEvent[]
+  id                                   String                              @id @default(uuid()) @db.Uuid
+  userId                               String                              @map("user_id") @db.Uuid
+  recipeVersionId                      String                              @map("recipe_version_id") @db.Uuid
+  personalizedRecipeVersionId          String?                             @map("personalized_recipe_version_id") @db.Uuid
+  householdPersonalizedRecipeVersionId String?                             @map("household_personalized_recipe_version_id") @db.Uuid
+  status                               String                              @default("started") @db.VarChar(24)
+  servings                             Decimal                             @db.Decimal(6, 2)
+  syncVersion                          Int                                 @default(1) @map("sync_version")
+  snapshotJson                         Json?                               @map("snapshot_json")
+  startedAt                            DateTime                            @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt                          DateTime?                           @map("completed_at") @db.Timestamptz(6)
+  user                                 User                                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipeVersion                        RecipeVersion                       @relation(fields: [recipeVersionId], references: [id])
+  personalizedRecipeVersion            PersonalizedRecipeVersion?          @relation(fields: [personalizedRecipeVersionId], references: [id], onDelete: SetNull)
+  householdPersonalizedRecipeVersion   HouseholdPersonalizedRecipeVersion? @relation(fields: [householdPersonalizedRecipeVersionId], references: [id], onDelete: SetNull)
+  feedback                             CookFeedback?
+  events                               CookEvent[]
 
   @@index([userId, startedAt])
   @@index([personalizedRecipeVersionId])
+  @@index([householdPersonalizedRecipeVersionId])
   @@map("cook_sessions")
+}
+
+model Household {
+  id                   String                               @id @default(uuid()) @db.Uuid
+  name                 String                               @db.VarChar(120)
+  status               String                               @default("active") @db.VarChar(24)
+  createdAt            DateTime                             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  members              HouseholdMember[]
+  invites              HouseholdInvite[]
+  personalizedVersions HouseholdPersonalizedRecipeVersion[]
+
+  @@index([status, createdAt])
+  @@map("households")
+}
+
+model HouseholdMember {
+  id          String    @id @default(uuid()) @db.Uuid
+  householdId String    @map("household_id") @db.Uuid
+  userId      String    @unique @map("user_id") @db.Uuid
+  role        String    @default("member") @db.VarChar(16)
+  joinedAt    DateTime  @default(now()) @map("joined_at") @db.Timestamptz(6)
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, userId])
+  @@index([householdId, joinedAt, id])
+  @@map("household_members")
+}
+
+model HouseholdInvite {
+  id              String    @id @default(uuid()) @db.Uuid
+  householdId     String    @map("household_id") @db.Uuid
+  tokenHash       String    @unique @map("token_hash") @db.Char(64)
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt          DateTime? @map("used_at") @db.Timestamptz(6)
+  createdByUserId String?   @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdBy       User?     @relation("HouseholdInviteCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([householdId, expiresAt, usedAt])
+  @@index([createdByUserId])
+  @@map("household_invites")
+}
+
+model HouseholdPersonalizedRecipeVersion {
+  id                      String        @id @default(uuid()) @db.Uuid
+  householdId             String        @map("household_id") @db.Uuid
+  recipeId                String        @map("recipe_id") @db.Uuid
+  baseRecipeVersionId     String        @map("base_recipe_version_id") @db.Uuid
+  versionNo               Int           @map("version_no")
+  algorithmVersion        String        @map("algorithm_version") @db.VarChar(32)
+  contentHash             String        @map("content_hash") @db.VarChar(64)
+  familyTasteSnapshotJson Json          @map("family_taste_snapshot_json")
+  snapshotJson            Json          @map("snapshot_json")
+  createdAt               DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  household               Household     @relation(fields: [householdId], references: [id], onDelete: Restrict)
+  recipe                  Recipe        @relation(fields: [recipeId], references: [id], onDelete: Restrict)
+  baseRecipeVersion       RecipeVersion @relation(fields: [baseRecipeVersionId], references: [id], onDelete: Restrict)
+  cookSessions            CookSession[]
+
+  @@unique([householdId, recipeId, versionNo], map: "household_versions_household_recipe_version_key")
+  @@unique([householdId, recipeId, contentHash], map: "household_versions_household_recipe_hash_key")
+  @@index([householdId, recipeId, createdAt])
+  @@index([baseRecipeVersionId])
+  @@map("household_personalized_recipe_versions")
 }
 
 model CookEvent {

@@ -13,6 +13,7 @@ import { DevModule } from './dev/dev.module';
 import { OriginGuard } from './http/origin.guard';
 import { ObservabilityModule } from './observability/observability.module';
 import { AdminModule } from './admin/admin.module';
+import { HouseholdModule } from './household/household.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { AdminModule } from './admin/admin.module';
     FeedbackModule,
     PersonalizationModule,
     AdminModule,
+    HouseholdModule,
     ...(process.env.NODE_ENV === 'production'
       ? []
       : [DevModule]),

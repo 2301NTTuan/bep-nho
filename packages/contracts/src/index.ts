@@ -156,6 +156,9 @@ export type CookSnapshot = {
   personalizedVersion: {
     id: string; versionNo: number; algorithmVersion: string;
   } | null;
+  householdPersonalizedVersion: {
+    id: string; versionNo: number; algorithmVersion: string; householdId: string;
+  } | null;
   servings: number;
   prepTimeMinutes: number | null;
   cookTimeMinutes: number | null;
@@ -170,9 +173,11 @@ export type CookSession = {
   id: string; userId: string; status: string; servings: number; syncVersion: number;
   startedAt: string; completedAt: string | null;
   recipe: {
-    id: string; slug: string; title: string; source: 'canonical' | 'personalized';
+    id: string; slug: string; title: string; source: 'canonical' | 'personalized' | 'household';
     versionId: string; versionNo: number; personalizedVersionId: string | null;
     personalizedVersionNo: number | null; personalizationAlgorithm: string | null;
+    householdPersonalizedVersionId: string | null;
+    householdPersonalizedVersionNo: number | null;
   };
   snapshot: CookSnapshot;
   events: CookSessionEvent[];

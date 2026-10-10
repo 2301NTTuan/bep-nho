@@ -1,6 +1,44 @@
 export type TasteDimensionKey = 'saltiness'|'sweetness'|'sourness'|'spiciness'|'umami'|'fat_richness'|'bitterness'|'softness'|'dryness_sauce'|'garlic_onion'|'herbal_aroma';
+export const TASTE_DIMENSION_KEYS: TasteDimensionKey[] = ['saltiness','sweetness','sourness','spiciness','umami','fat_richness','bitterness','softness','dryness_sauce','garlic_onion','herbal_aroma'];
 export type TasteDimensionState = { score:number; confidence:number; effectiveWeight:number; sampleCount:number; manualOverride?:number | null };
 export const clampTaste=(v:number)=>Math.max(-1,Math.min(1,v));
+
+export type FamilyTasteInput = {
+  dimensionKey: TasteDimensionKey;
+  score: number;
+  confidence: number;
+  manualOverride: number | null;
+};
+
+export type FamilyTasteDimension = {
+  key: TasteDimensionKey;
+  score: number;
+  confidence: number;
+  activeMemberCount: number;
+  contributingMemberCount: number;
+};
+
+export function aggregateFamilyTaste(
+  activeMemberCount: number,
+  rows: FamilyTasteInput[],
+): FamilyTasteDimension[] {
+  return TASTE_DIMENSION_KEYS.map((key) => {
+    const values = rows.filter((row) => row.dimensionKey === key).map((row) => ({
+      score: clampTaste(row.manualOverride === null ? row.score : row.manualOverride),
+      confidence: row.manualOverride === null ? Math.max(0, Math.min(1, row.confidence)) : 1,
+    }));
+    const confidenceSum = values.reduce((sum, value) => sum + value.confidence, 0);
+    const weightedScore = values.reduce((sum, value) => sum + value.score * value.confidence, 0);
+    const stable = (value: number) => Math.round(value * 1_000_000_000_000) / 1_000_000_000_000;
+    return {
+      key,
+      score: confidenceSum > 0 ? stable(clampTaste(weightedScore / confidenceSum)) : 0,
+      confidence: activeMemberCount > 0 ? stable(Math.max(0, Math.min(1, confidenceSum / activeMemberCount))) : 0,
+      activeMemberCount,
+      contributingMemberCount: values.filter((value) => value.confidence > 0).length,
+    };
+  });
+}
 
 export type ReplayableTasteSignal = {
   signalValue: number;

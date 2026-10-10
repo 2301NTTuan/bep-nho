@@ -14,7 +14,7 @@ export type ScalingMode = (typeof SCALING_MODES)[number];
 export type RecipeListItem = {
   id: string; slug: string; title: string; cuisine: string;
   latestVersion: {
-    versionNo: number; servings: number; prepTimeMinutes: number | null;
+    id: string; versionNo: number; servings: number; prepTimeMinutes: number | null;
     cookTimeMinutes: number | null; summary: string | null; publishedAt: string | null;
     heroMedia: RecipeHeroMedia | null;
   } | null;

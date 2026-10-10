@@ -68,6 +68,9 @@ export class RecipesService {
 
             latestVersion: latest
               ? {
+                  id:
+                    latest.id,
+
                   versionNo:
                     latest.versionNo,
 

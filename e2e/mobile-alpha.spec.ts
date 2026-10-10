@@ -113,4 +113,7 @@ test('mobile alpha journey keeps core routes usable @e2e @a11y', async ({ page }
   await expect(page.getByRole('heading', { name: 'Tài khoản' })).toBeVisible();
   await expectNoHorizontalOverflow(page);
   await expectAccessible(page);
+
+  await page.setViewportSize({ width: 360, height: 800 });
+  await expectNoHorizontalOverflow(page);
 });

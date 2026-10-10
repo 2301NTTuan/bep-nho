@@ -7,6 +7,7 @@ import { ApiSessionProtected, ApiStandardErrors } from '../openapi/decorators';
 import {
   CreateHouseholdPantryItemDto,
   DeleteHouseholdPantryItemQueryDto,
+  DiscoverHouseholdPantryIngredientsQueryDto,
   UpdateHouseholdPantryItemDto,
 } from './dto/pantry.dto';
 import { PantryService } from './pantry.service';
@@ -24,6 +25,17 @@ export class PantryController {
   @ApiStandardErrors(401, 404)
   list(@CurrentUser() identity: AuthenticatedIdentity) {
     return this.pantry.list(identity.userId);
+  }
+
+  @Get('ingredients')
+  @ApiOperation({ summary: 'Discover canonical ingredients for an active household pantry.' })
+  @ApiResponse({ status: 200, description: 'Bounded canonical ingredient results ordered by name and ID.' })
+  @ApiStandardErrors(400, 401, 404)
+  discover(
+    @CurrentUser() identity: AuthenticatedIdentity,
+    @Query() query: DiscoverHouseholdPantryIngredientsQueryDto,
+  ) {
+    return this.pantry.discoverIngredients(identity.userId, query);
   }
 
   @Post()

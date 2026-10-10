@@ -85,3 +85,20 @@ export class DeleteHouseholdPantryItemQueryDto {
   @Min(1)
   expectedRevision!: number;
 }
+
+export class DiscoverHouseholdPantryIngredientsQueryDto {
+  @ApiPropertyOptional({ maxLength: 120, description: 'Simple case-insensitive canonical ingredient-name substring.' })
+  @IsOptional()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @IsString()
+  @MaxLength(120)
+  query?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 50, default: 30 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit = 30;
+}

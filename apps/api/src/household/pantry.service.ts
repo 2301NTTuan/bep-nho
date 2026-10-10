@@ -9,7 +9,11 @@ import { Prisma } from '@prisma/client';
 import { formatIsoCalendarDate, parseIsoCalendarDate } from '@bep-nho/domain';
 import { HouseholdLockService } from '../database/household-lock.service';
 import { PrismaService } from '../database/prisma.service';
-import type { CreateHouseholdPantryItemDto, UpdateHouseholdPantryItemDto } from './dto/pantry.dto';
+import type {
+  CreateHouseholdPantryItemDto,
+  DiscoverHouseholdPantryIngredientsQueryDto,
+  UpdateHouseholdPantryItemDto,
+} from './dto/pantry.dto';
 
 const pantryItemInclude = Prisma.validator<Prisma.HouseholdPantryItemInclude>()({
   ingredient: { select: { id: true, slug: true, canonicalName: true, category: true } },
@@ -34,6 +38,25 @@ export class PantryService {
       orderBy: [{ ingredient: { canonicalName: 'asc' } }, { id: 'asc' }],
     });
     return { data: items.map((item) => this.serialize(item)) };
+  }
+
+  async discoverIngredients(userId: string, query: DiscoverHouseholdPantryIngredientsQueryDto) {
+    await this.activeMembership(userId);
+    const name = query.query?.trim();
+    const ingredients = await this.prisma.ingredient.findMany({
+      where: name ? { canonicalName: { contains: name, mode: 'insensitive' } } : undefined,
+      select: { id: true, slug: true, canonicalName: true, category: true },
+      orderBy: [{ canonicalName: 'asc' }, { id: 'asc' }],
+      take: query.limit,
+    });
+    return {
+      data: ingredients.map((ingredient) => ({
+        id: ingredient.id,
+        slug: ingredient.slug,
+        name: ingredient.canonicalName,
+        category: ingredient.category,
+      })),
+    };
   }
 
   async create(userId: string, dto: CreateHouseholdPantryItemDto) {

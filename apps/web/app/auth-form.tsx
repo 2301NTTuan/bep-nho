@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import type { CurrentUserResponse } from '@bep-nho/contracts';
 import { ApiRequestError, apiRequest, getErrorMessage } from '../lib/api';
@@ -11,6 +11,7 @@ type AuthMode = 'login' | 'register';
 
 export function AuthForm({ mode }: { mode: AuthMode }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -32,7 +33,8 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
-      router.replace('/');
+      const next = searchParams.get('next');
+      router.replace(next?.startsWith('/') && !next.startsWith('//') ? next : '/');
       router.refresh();
     } catch (cause) {
       if (cause instanceof ApiRequestError && !registering && cause.status === 401) {
@@ -56,7 +58,8 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
     setBusy(true); setError(null);
     try {
       await establishDevelopmentSession();
-      router.replace('/');
+      const next = searchParams.get('next');
+      router.replace(next?.startsWith('/') && !next.startsWith('//') ? next : '/');
       router.refresh();
     } catch (cause) {
       setError(getErrorMessage(cause, 'Không thể mở phiên phát triển.'));

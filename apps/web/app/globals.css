@@ -168,6 +168,23 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 3px sol
   .resultHero { margin-top: -35px; padding-top: 55px; }.learningCard { padding: 24px 18px; }.learningHead { align-items: start; }.learningHead h2 { font-size: 23px; }.resultActions { flex-direction: column; }.resultActions .button { width: 100%; }
 }
 
+/* Household and Family Taste */
+.householdShell { padding-bottom: 90px; }
+.householdHero { margin: 18px 0 20px; padding: 44px; border-radius: 28px; background: var(--green-dark); color: white; }
+.householdHero .eyebrow { color: #ffd8cf; }
+.householdHero h1 { margin: 12px 0; font-family: var(--serif); font-size: clamp(42px, 7vw, 68px); font-weight: 500; letter-spacing: -.045em; }
+.householdHero p { max-width: 760px; margin: 0; color: rgba(255,255,255,.7); line-height: 1.65; }
+.householdGrid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 18px; }
+.householdCreate { max-width: 620px; margin: 0 auto; }
+.householdShell .button:not(.secondary) { background: var(--green-dark); }
+.compactForm { margin: 0 0 18px; }
+.inviteBox { display: grid; gap: 9px; margin-top: 16px; padding: 14px; border-radius: 12px; background: #f3eee4; }
+.inviteBox label { display: grid; gap: 6px; }.inviteBox span { color: var(--muted); font-size: 10px; font-weight: 900; }.inviteBox input { min-height: 44px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: white; }
+.familyTastePanel { margin-top: 18px; }.familyTasteGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.familyTasteGrid article { display: grid; gap: 6px; padding: 16px; border-radius: 12px; background: #f3eee4; }.familyTasteGrid strong { font-size: 11px; }.familyTasteGrid b { color: var(--green); font-family: var(--serif); font-size: 28px; }.familyTasteGrid span { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.familyBanner { background: #633f74; }
+@media (max-width: 800px) { .householdHero { padding: 30px 23px; }.householdGrid, .familyTasteGrid { grid-template-columns: 1fr; } }
+
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
 
 /* Authentication */

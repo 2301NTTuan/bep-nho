@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { CookSnapshot, PersonalizedSnapshot, RecipeStep } from '@bep-nho/contracts';
-import { scaleIngredientQuantity } from '@bep-nho/domain';
+import { scaleEffectiveIngredient } from '@bep-nho/domain';
 import { PrismaService } from '../database/prisma.service';
 import { AddCookEventDto } from './dto/add-cook-event.dto';
 import { StartCookSessionDto } from './dto/start-cook-session.dto';
@@ -64,59 +64,61 @@ export class CookSessionsService {
 
     const ingredients = base.ingredients.map((row) => {
       const previous = snapshotIngredients.find((item) => item.slug === row.ingredient.slug);
-      const canonicalQuantity = numberOr(previous?.baseQuantity, Number(row.quantity));
-      const previousQuantity = numberOr(previous?.quantity, canonicalQuantity);
-      const personalizationFactor = personalized
-        ? numberOr(previous?.personalizationFactor, canonicalQuantity === 0 ? 1 : previousQuantity / canonicalQuantity)
-        : 1;
-      const scalingMode = typeof previous?.scalingMode === 'string'
-        ? previous.scalingMode
-        : row.scalingMode;
-      const scalingExponent = numberOr(previous?.scalingExponent, Number(row.scalingExponent));
-      const databaseRoundingIncrement = row.roundingIncrement === null
-        ? null
-        : Number(row.roundingIncrement);
-      const roundingIncrement = previous?.roundingIncrement === null
-        ? null
-        : typeof previous?.roundingIncrement === 'number' && Number.isFinite(previous.roundingIncrement)
-          ? previous.roundingIncrement
-          : databaseRoundingIncrement;
-      const scaled = scaleIngredientQuantity(
-        {
-          quantity: canonicalQuantity,
-          unit: row.unit,
-          scalingMode,
-          scalingExponent,
-          roundingIncrement,
-        },
-        sourceServings,
-        targetServings,
-        personalizationFactor,
-      );
+      const scaled = scaleEffectiveIngredient({
+        ingredientId: row.ingredient.id,
+        slug: row.ingredient.slug,
+        name: row.ingredient.canonicalName,
+        category: row.ingredient.category,
+        quantity: Number(row.quantity),
+        unit: row.unit,
+        sortOrder: row.sortOrder,
+        scalingMode: row.scalingMode,
+        scalingExponent: Number(row.scalingExponent),
+        roundingIncrement: row.roundingIncrement === null ? null : Number(row.roundingIncrement),
+      }, personalized && previous ? {
+        ingredientId: typeof previous.id === 'string' ? previous.id : undefined,
+        slug: typeof previous.slug === 'string' ? previous.slug : undefined,
+        name: typeof previous.name === 'string' ? previous.name : undefined,
+        category: typeof previous.category === 'string' || previous.category === null
+          ? previous.category as string | null
+          : undefined,
+        baseQuantity: numberOr(previous.baseQuantity, Number(row.quantity)),
+        quantity: numberOr(previous.quantity, Number(row.quantity)),
+        personalizationFactor: typeof previous.personalizationFactor === 'number'
+          ? previous.personalizationFactor
+          : undefined,
+        unit: typeof previous.unit === 'string' ? previous.unit : undefined,
+        sortOrder: numberOr(previous.sortOrder, row.sortOrder),
+        scalingMode: typeof previous.scalingMode === 'string' ? previous.scalingMode : row.scalingMode,
+        scalingExponent: numberOr(previous.scalingExponent, Number(row.scalingExponent)),
+        roundingIncrement: previous.roundingIncrement === null
+          ? null
+          : typeof previous.roundingIncrement === 'number'
+            ? previous.roundingIncrement
+            : row.roundingIncrement === null ? null : Number(row.roundingIncrement),
+      } : null, sourceServings, targetServings);
 
       return {
         id: row.ingredient.id,
         slug: row.ingredient.slug,
-        name: typeof previous?.name === 'string' ? previous.name : row.ingredient.canonicalName,
-        category: typeof previous?.category === 'string' || previous?.category === null
-          ? previous.category as string | null
-          : row.ingredient.category,
+        name: scaled.name,
+        category: scaled.category,
         quantity: scaled.quantity,
         canonicalQuantity: scaled.canonicalQuantity,
         scaledQuantity: scaled.scaledQuantity,
         personalizationFactor: scaled.personalizationFactor,
         personalized: personalized !== null && Math.abs(scaled.personalizationFactor - 1) > 0.000001,
-        unit: typeof previous?.unit === 'string' ? previous.unit : row.unit,
+        unit: scaled.unit,
         preparation: typeof previous?.preparation === 'string' || previous?.preparation === null
           ? previous.preparation as string | null
           : row.preparation,
         note: typeof previous?.note === 'string' || previous?.note === null
           ? previous.note as string | null
           : row.note,
-        sortOrder: numberOr(previous?.sortOrder, row.sortOrder),
-        scalingMode: scalingMode as 'LINEAR' | 'CONSERVATIVE' | 'FIXED',
-        scalingExponent,
-        roundingIncrement,
+        sortOrder: scaled.sortOrder,
+        scalingMode: scaled.scalingMode as 'LINEAR' | 'CONSERVATIVE' | 'FIXED',
+        scalingExponent: scaled.scalingExponent ?? 0.75,
+        roundingIncrement: scaled.roundingIncrement ?? null,
       };
     });
 

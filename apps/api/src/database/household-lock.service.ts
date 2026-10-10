@@ -14,7 +14,9 @@ export type HouseholdLockOperation =
   | 'meal_plan_suggestion_apply'
   | 'pantry_item_create'
   | 'pantry_item_update'
-  | 'pantry_item_delete';
+  | 'pantry_item_delete'
+  | 'shopping_requirements_preview'
+  | 'shopping_list_generate';
 
 @Injectable()
 export class HouseholdLockService {

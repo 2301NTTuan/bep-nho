@@ -10,8 +10,10 @@ import {
   PreviewHouseholdMealPlanSuggestionsDto,
   UpsertHouseholdMealPlanEntryDto,
 } from './dto/meal-plan.dto';
+import { GenerateHouseholdShoppingListDto } from './dto/shopping-list.dto';
 import { MealPlanService } from './meal-plan.service';
 import { MealPlanSuggestionService } from './meal-plan-suggestion.service';
+import { ShoppingListService } from './shopping-list.service';
 
 @ApiTags('Household meal plans')
 @ApiSessionProtected()
@@ -21,6 +23,7 @@ export class MealPlanController {
   constructor(
     private readonly mealPlans: MealPlanService,
     private readonly suggestions: MealPlanSuggestionService,
+    private readonly shoppingLists: ShoppingListService,
   ) {}
 
   @Get(':weekStart')
@@ -38,6 +41,49 @@ export class MealPlanController {
   @ApiStandardErrors(400, 401, 404)
   create(@CurrentUser() identity: AuthenticatedIdentity, @Body() dto: CreateHouseholdMealPlanDto) {
     return this.mealPlans.create(identity.userId, dto.weekStart);
+  }
+
+  @Get(':weekStart/shopping-requirements')
+  @ApiOperation({
+    summary: 'Preview deterministic shopping requirements without persisting a list.',
+    description: 'shopping-requirements-v1 uses exact meal-plan versions and Cook Mode serving scaling, aggregates by ingredient and exact unit, then subtracts pantry only for exact unit matches. No unit conversion is performed.',
+  })
+  @ApiParam({ name: 'weekStart', example: '2026-10-12' })
+  @ApiResponse({ status: 200, description: 'Read-only requirements preview and inputHash.' })
+  @ApiStandardErrors(400, 401, 404)
+  previewShoppingRequirements(
+    @CurrentUser() identity: AuthenticatedIdentity,
+    @Param('weekStart') weekStart: string,
+  ) {
+    return this.shoppingLists.preview(identity.userId, weekStart);
+  }
+
+  @Post(':weekStart/shopping-list')
+  @ApiOperation({
+    summary: 'Generate or reuse an immutable household shopping-list snapshot.',
+    description: 'The server recomputes shopping-requirements-v1 under the household lock and rejects a stale expectedInputHash with 409. Client quantities are never accepted.',
+  })
+  @ApiParam({ name: 'weekStart', example: '2026-10-12' })
+  @ApiResponse({ status: 201, description: 'Immutable shopping list created/reused; empty requirements are a non-persisted no-op.' })
+  @ApiStandardErrors(400, 401, 404, 409)
+  generateShoppingList(
+    @CurrentUser() identity: AuthenticatedIdentity,
+    @Param('weekStart') weekStart: string,
+    @Body() dto: GenerateHouseholdShoppingListDto,
+  ) {
+    return this.shoppingLists.generate(identity.userId, weekStart, dto.expectedInputHash);
+  }
+
+  @Get(':weekStart/shopping-list/latest')
+  @ApiOperation({ summary: 'Read the latest immutable shopping-list snapshot for a week.' })
+  @ApiParam({ name: 'weekStart', example: '2026-10-12' })
+  @ApiResponse({ status: 200, description: 'Latest owner-scoped immutable shopping list.' })
+  @ApiStandardErrors(400, 401, 404)
+  latestShoppingList(
+    @CurrentUser() identity: AuthenticatedIdentity,
+    @Param('weekStart') weekStart: string,
+  ) {
+    return this.shoppingLists.latest(identity.userId, weekStart);
   }
 
   @Post(':weekStart/suggestions')

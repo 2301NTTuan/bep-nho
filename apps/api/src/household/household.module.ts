@@ -9,11 +9,13 @@ import { MealPlanService } from './meal-plan.service';
 import { MealPlanSuggestionService } from './meal-plan-suggestion.service';
 import { PantryController } from './pantry.controller';
 import { PantryService } from './pantry.service';
+import { ShoppingListController } from './shopping-list.controller';
+import { ShoppingListService } from './shopping-list.service';
 
 @Module({
   imports: [AuthModule, AdminModule],
-  controllers: [HouseholdController, HouseholdInviteController, MealPlanController, PantryController],
-  providers: [HouseholdService, FamilyPersonalizationService, MealPlanService, MealPlanSuggestionService, PantryService],
-  exports: [HouseholdService, FamilyPersonalizationService, MealPlanService, MealPlanSuggestionService, PantryService],
+  controllers: [HouseholdController, HouseholdInviteController, MealPlanController, PantryController, ShoppingListController],
+  providers: [HouseholdService, FamilyPersonalizationService, MealPlanService, MealPlanSuggestionService, PantryService, ShoppingListService],
+  exports: [HouseholdService, FamilyPersonalizationService, MealPlanService, MealPlanSuggestionService, PantryService, ShoppingListService],
 })
 export class HouseholdModule {}

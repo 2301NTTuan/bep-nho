@@ -202,6 +202,19 @@
         ],
         "type": "object"
       },
+      "GenerateHouseholdShoppingListDto": {
+        "properties": {
+          "expectedInputHash": {
+            "description": "SHA-256 inputHash from the latest shopping-requirements preview.",
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expectedInputHash"
+        ],
+        "type": "object"
+      },
       "HouseholdMealPlanSuggestionSlotDto": {
         "properties": {
           "mealType": {
@@ -7129,6 +7142,654 @@
         ]
       }
     },
+    "/v1/me/household/meal-plans/{weekStart}/shopping-list": {
+      "post": {
+        "description": "The server recomputes shopping-requirements-v1 under the household lock and rejects a stale expectedInputHash with 409. Client quantities are never accepted.",
+        "operationId": "MealPlanController_generateShoppingList",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "weekStart",
+            "required": true,
+            "schema": {
+              "example": "2026-10-12",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateHouseholdShoppingListDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Immutable shopping list created/reused; empty requirements are a non-persisted no-op."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "BAD_REQUEST"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "UNAUTHORIZED"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "FORBIDDEN"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "NOT_FOUND"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "CONFLICT"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Generate or reuse an immutable household shopping-list snapshot.",
+        "tags": [
+          "Household meal plans"
+        ]
+      }
+    },
+    "/v1/me/household/meal-plans/{weekStart}/shopping-list/latest": {
+      "get": {
+        "operationId": "MealPlanController_latestShoppingList",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "weekStart",
+            "required": true,
+            "schema": {
+              "example": "2026-10-12",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest owner-scoped immutable shopping list."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "BAD_REQUEST"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "UNAUTHORIZED"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "FORBIDDEN"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read the latest immutable shopping-list snapshot for a week.",
+        "tags": [
+          "Household meal plans"
+        ]
+      }
+    },
+    "/v1/me/household/meal-plans/{weekStart}/shopping-requirements": {
+      "get": {
+        "description": "shopping-requirements-v1 uses exact meal-plan versions and Cook Mode serving scaling, aggregates by ingredient and exact unit, then subtracts pantry only for exact unit matches. No unit conversion is performed.",
+        "operationId": "MealPlanController_previewShoppingRequirements",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "weekStart",
+            "required": true,
+            "schema": {
+              "example": "2026-10-12",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read-only requirements preview and inputHash."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "BAD_REQUEST"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "UNAUTHORIZED"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "FORBIDDEN"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Preview deterministic shopping requirements without persisting a list.",
+        "tags": [
+          "Household meal plans"
+        ]
+      }
+    },
     "/v1/me/household/meal-plans/{weekStart}/suggestions": {
       "post": {
         "description": "family-meal-plan-v1 selects by availability, four-week history, and diversity. Aggregate Family Taste only personalizes the immutable cooking versions.",
@@ -9263,6 +9924,163 @@
         "summary": "Get the latest household personalized recipe version.",
         "tags": [
           "Household"
+        ]
+      }
+    },
+    "/v1/me/household/shopping-lists/{shoppingListId}": {
+      "get": {
+        "description": "Access is derived from current household membership; creator provenance does not grant access.",
+        "operationId": "ShoppingListController_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shoppingListId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner-scoped immutable shopping list."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "UNAUTHORIZED"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "FORBIDDEN"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "example": "VALIDATION_ERROR",
+                          "type": "string"
+                        },
+                        "details": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "maxLength": 64,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read one immutable household shopping-list snapshot.",
+        "tags": [
+          "Household shopping lists"
         ]
       }
     },

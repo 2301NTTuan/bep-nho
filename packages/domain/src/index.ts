@@ -324,6 +324,72 @@ export function scaleIngredientQuantity(
   };
 }
 
+export type EffectiveIngredientSource = ScalableIngredient & {
+  ingredientId: string;
+  slug: string;
+  name: string;
+  category: string | null;
+  sortOrder: number;
+};
+
+export type PersonalizedIngredientSource = Partial<ScalableIngredient> & {
+  ingredientId?: string;
+  slug?: string;
+  name?: string;
+  category?: string | null;
+  baseQuantity?: number;
+  personalizationFactor?: number;
+  sortOrder?: number;
+};
+
+export type EffectiveScaledIngredient = EffectiveIngredientSource & ScaledQuantity;
+
+/**
+ * Resolves an immutable personalized ingredient over its exact canonical base,
+ * then applies the same serving scaling order used by Cook Mode.
+ */
+export function scaleEffectiveIngredient(
+  canonical: EffectiveIngredientSource,
+  personalized: PersonalizedIngredientSource | null,
+  sourceServings: number,
+  targetServings: number,
+): EffectiveScaledIngredient {
+  const canonicalQuantity = personalized?.baseQuantity ?? canonical.quantity;
+  const personalizedQuantity = personalized?.quantity ?? canonicalQuantity;
+  const personalizationFactor = personalized?.personalizationFactor
+    ?? (canonicalQuantity === 0 ? 1 : personalizedQuantity / canonicalQuantity);
+  const scalingMode = personalized?.scalingMode ?? canonical.scalingMode;
+  const scalingExponent = personalized?.scalingExponent ?? canonical.scalingExponent;
+  const roundingIncrement = personalized && Object.prototype.hasOwnProperty.call(personalized, 'roundingIncrement')
+    ? personalized.roundingIncrement
+    : canonical.roundingIncrement;
+  const scaled = scaleIngredientQuantity({
+    quantity: canonicalQuantity,
+    // Preserve Cook Mode's canonical-unit rounding lookup. The output unit may
+    // be personalized, but no unit conversion is performed here.
+    unit: canonical.unit,
+    scalingMode,
+    scalingExponent,
+    roundingIncrement,
+  }, sourceServings, targetServings, personalizationFactor);
+
+  return {
+    ingredientId: canonical.ingredientId,
+    slug: personalized?.slug ?? canonical.slug,
+    name: personalized?.name ?? canonical.name,
+    category: personalized?.category !== undefined ? personalized.category : canonical.category,
+    quantity: scaled.quantity,
+    canonicalQuantity: scaled.canonicalQuantity,
+    scaledQuantity: scaled.scaledQuantity,
+    personalizationFactor: scaled.personalizationFactor,
+    unit: personalized?.unit ?? canonical.unit,
+    sortOrder: personalized?.sortOrder ?? canonical.sortOrder,
+    scalingMode,
+    scalingExponent,
+    roundingIncrement,
+  };
+}
+
 export type RecipeIngredientValue = {
   ingredientSlug: string;
   quantity: number;

@@ -156,7 +156,14 @@ jobs:
           pnpm --filter @bep-nho/database db:seed
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm exec playwright test
+      - name: Run Playwright suite
+        env:
+          AUTH_RATE_LIMIT_KEY_PREFIX: bep-nho:ci-e2e
+          AUTH_RATE_LIMIT_LOGIN_POINTS: '10000'
+          AUTH_RATE_LIMIT_REGISTER_POINTS: '10000'
+          AUTH_RATE_LIMIT_LIFECYCLE_REQUEST_POINTS: '10000'
+          AUTH_RATE_LIMIT_LIFECYCLE_CONFIRM_POINTS: '10000'
+        run: pnpm exec playwright test
       - name: Upload failure screenshots and report
         if: failure()
         uses: actions/upload-artifact@v4

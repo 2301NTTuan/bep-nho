@@ -10,7 +10,8 @@ export type HouseholdLockOperation =
   | 'meal_plan_create'
   | 'meal_plan_entry_create'
   | 'meal_plan_entry_update'
-  | 'meal_plan_entry_delete';
+  | 'meal_plan_entry_delete'
+  | 'meal_plan_suggestion_apply';
 
 @Injectable()
 export class HouseholdLockService {

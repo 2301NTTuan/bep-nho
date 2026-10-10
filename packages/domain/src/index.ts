@@ -41,6 +41,82 @@ export function formatIsoCalendarDate(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
+export const FAMILY_MEAL_PLAN_ALGORITHM_VERSION = 'family-meal-plan-v1' as const;
+export const SUGGESTION_MEAL_TYPES = ['lunch', 'dinner'] as const;
+export type SuggestionMealType = typeof SUGGESTION_MEAL_TYPES[number];
+export type FamilyMealPlanSlot = { plannedDate: string; mealType: SuggestionMealType };
+export type FamilyMealPlanCandidate = { recipeId: string; recentUseCount: number };
+export type FamilyMealPlanExistingEntry = { plannedDate: string; recipeId: string };
+
+const suggestionMealTypeOrder: Record<SuggestionMealType, number> = { lunch: 0, dinner: 1 };
+
+export function canonicalizeFamilyMealPlanSlots(slots: FamilyMealPlanSlot[]): FamilyMealPlanSlot[] {
+  return [...slots].sort((left, right) => (
+    left.plannedDate.localeCompare(right.plannedDate)
+    || suggestionMealTypeOrder[left.mealType] - suggestionMealTypeOrder[right.mealType]
+  ));
+}
+
+export type FamilyMealPlanSelection = FamilyMealPlanSlot & {
+  recipeId: string;
+  recentUseCount: number;
+  alreadyUsedThisWeek: boolean;
+  deterministicTieBreak: string;
+};
+
+export function selectFamilyMealPlanRecipes(input: {
+  householdId: string;
+  weekStart: string;
+  slots: FamilyMealPlanSlot[];
+  candidates: FamilyMealPlanCandidate[];
+  currentWeekEntries: FamilyMealPlanExistingEntry[];
+  tieBreak: (slot: FamilyMealPlanSlot, recipeId: string) => string;
+}): FamilyMealPlanSelection[] {
+  if (input.candidates.length === 0) throw new Error('No published recipe candidates are available.');
+  const slots = canonicalizeFamilyMealPlanSlots(input.slots);
+  const initialRecipeIds = new Set(input.currentWeekEntries.map((entry) => entry.recipeId));
+  const usedRecipeIds = new Set(initialRecipeIds);
+  const recipeDates = new Map<string, Set<string>>();
+  for (const entry of input.currentWeekEntries) {
+    const dates = recipeDates.get(entry.recipeId) ?? new Set<string>();
+    dates.add(entry.plannedDate);
+    recipeDates.set(entry.recipeId, dates);
+  }
+  const adjacent = (recipeId: string, plannedDate: string) => {
+    const target = parseIsoCalendarDate(plannedDate).getTime();
+    return [...(recipeDates.get(recipeId) ?? [])]
+      .some((date) => Math.abs(parseIsoCalendarDate(date).getTime() - target) === DAY_MS);
+  };
+  const selections: FamilyMealPlanSelection[] = [];
+  for (const slot of slots) {
+    const ranked = input.candidates.map((candidate) => ({
+      ...candidate,
+      used: usedRecipeIds.has(candidate.recipeId),
+      adjacent: adjacent(candidate.recipeId, slot.plannedDate),
+      tieBreak: input.tieBreak(slot, candidate.recipeId),
+    })).sort((left, right) => (
+      Number(left.used) - Number(right.used)
+      || left.recentUseCount - right.recentUseCount
+      || Number(left.adjacent) - Number(right.adjacent)
+      || left.tieBreak.localeCompare(right.tieBreak)
+      || left.recipeId.localeCompare(right.recipeId)
+    ));
+    const chosen = ranked[0];
+    selections.push({
+      ...slot,
+      recipeId: chosen.recipeId,
+      recentUseCount: chosen.recentUseCount,
+      alreadyUsedThisWeek: initialRecipeIds.has(chosen.recipeId),
+      deterministicTieBreak: chosen.tieBreak,
+    });
+    usedRecipeIds.add(chosen.recipeId);
+    const dates = recipeDates.get(chosen.recipeId) ?? new Set<string>();
+    dates.add(slot.plannedDate);
+    recipeDates.set(chosen.recipeId, dates);
+  }
+  return selections;
+}
+
 export type FamilyTasteInput = {
   dimensionKey: TasteDimensionKey;
   score: number;

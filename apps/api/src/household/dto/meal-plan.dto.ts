@@ -1,6 +1,21 @@
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
-import { MEAL_TYPES, type MealType } from '@bep-nho/domain';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+import { MEAL_TYPES, SUGGESTION_MEAL_TYPES, type MealType, type SuggestionMealType } from '@bep-nho/domain';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -48,4 +63,35 @@ export class UpsertHouseholdMealPlanEntryDto {
   @IsString()
   @MaxLength(500)
   note?: string | null;
+}
+
+export class HouseholdMealPlanSuggestionSlotDto {
+  @ApiProperty({ example: '2026-10-12', pattern: '^\\d{4}-\\d{2}-\\d{2}$' })
+  @IsString()
+  @Matches(ISO_DATE)
+  plannedDate!: string;
+
+  @ApiProperty({ enum: SUGGESTION_MEAL_TYPES, description: 'V1 suggestions support only lunch and dinner.' })
+  @IsIn(SUGGESTION_MEAL_TYPES)
+  mealType!: SuggestionMealType;
+}
+
+export class PreviewHouseholdMealPlanSuggestionsDto {
+  @ApiProperty({ type: [HouseholdMealPlanSuggestionSlotDto], minItems: 1, maxItems: 14 })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(14)
+  @ValidateNested({ each: true })
+  @Type(() => HouseholdMealPlanSuggestionSlotDto)
+  slots!: HouseholdMealPlanSuggestionSlotDto[];
+}
+
+export class ApplyHouseholdMealPlanSuggestionsDto extends PreviewHouseholdMealPlanSuggestionsDto {
+  @ApiProperty({
+    pattern: '^[a-f0-9]{64}$',
+    description: 'Hash returned by preview; apply recomputes all assumptions before one atomic insert.',
+  })
+  @IsString()
+  @Matches(/^[a-f0-9]{64}$/)
+  expectedSuggestionHash!: string;
 }

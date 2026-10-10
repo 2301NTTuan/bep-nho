@@ -196,6 +196,9 @@ For a bad database migration, prefer a reviewed forward-fix migration. If incide
 - **OpenAPI drift:** run `pnpm openapi:generate`, review the semantic change, then commit the regenerated artifact. Do not hand-edit the JSON.
 - **Restore/client mismatch:** install matching PostgreSQL client tools and create a fresh verified dump; do not bypass the check casually.
 - **Migration failure:** stop the release, preserve logs and database state, and decide between a forward fix and verified recovery. Never run `migrate reset`.
+- **Household invite rejected:** verify the household is active, below eight members, the user has no membership, and the token is unused/unexpired. Never inspect or log the raw token or stored hash.
+- **Family version blocked:** verify current membership and recipe `published` status. Generation takes the recipe lock before the household lock; do not introduce the reverse order in another transaction.
+- **Owner account deletion:** account deletion takes the account lifecycle lock before the household lock, then promotes the deterministic oldest remaining member or closes an empty household. Do not manually delete shared household-version history.
 
 ## Prohibited shortcuts
 

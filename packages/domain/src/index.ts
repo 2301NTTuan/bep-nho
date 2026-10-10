@@ -3,6 +3,44 @@ export const TASTE_DIMENSION_KEYS: TasteDimensionKey[] = ['saltiness','sweetness
 export type TasteDimensionState = { score:number; confidence:number; effectiveWeight:number; sampleCount:number; manualOverride?:number | null };
 export const clampTaste=(v:number)=>Math.max(-1,Math.min(1,v));
 
+export const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'other'] as const;
+export type MealType = typeof MEAL_TYPES[number];
+
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function parseIsoCalendarDate(value: string): Date {
+  if (!ISO_DATE_PATTERN.test(value)) throw new Error('Date must use YYYY-MM-DD format.');
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year
+    || date.getUTCMonth() !== month - 1
+    || date.getUTCDate() !== day
+  ) throw new Error('Date is not a valid calendar date.');
+  return date;
+}
+
+export function validateMondayWeekStart(value: string): Date {
+  const date = parseIsoCalendarDate(value);
+  if (date.getUTCDay() !== 1) throw new Error('weekStart must be a Monday.');
+  return date;
+}
+
+export function isDateInMealPlanWeek(weekStart: string, plannedDate: string): boolean {
+  const start = validateMondayWeekStart(weekStart).getTime();
+  const planned = parseIsoCalendarDate(plannedDate).getTime();
+  return planned >= start && planned <= start + (6 * DAY_MS);
+}
+
+export function isMealType(value: string): value is MealType {
+  return (MEAL_TYPES as readonly string[]).includes(value);
+}
+
+export function formatIsoCalendarDate(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
 export type FamilyTasteInput = {
   dimensionKey: TasteDimensionKey;
   score: number;

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
-export type RecipePublishOperation = 'publish' | 'archive' | 'restore';
+export type RecipePublishOperation = 'publish' | 'archive' | 'restore' | 'meal_plan_entry';
 export type RecipePublishLockPhase = 'before_acquire' | 'acquired';
 type TestHook = (phase: RecipePublishLockPhase, operation: RecipePublishOperation, recipeId: string) => Promise<void> | void;
 

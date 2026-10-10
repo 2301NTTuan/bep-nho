@@ -30,6 +30,8 @@ test.afterAll(async () => {
   const userIds = credentials.map((item) => item.userId);
   const memberships = await prisma.householdMember.findMany({ where: { userId: { in: userIds } }, select: { householdId: true } });
   const householdIds = [...new Set(memberships.map((item) => item.householdId))];
+  await prisma.householdShoppingListItem.deleteMany({ where: { shoppingList: { householdId: { in: householdIds } } } });
+  await prisma.householdShoppingList.deleteMany({ where: { householdId: { in: householdIds } } });
   await prisma.cookSession.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.householdMealPlanEntry.deleteMany({ where: { mealPlan: { householdId: { in: householdIds } } } });
   await prisma.householdMealPlan.deleteMany({ where: { householdId: { in: householdIds } } });

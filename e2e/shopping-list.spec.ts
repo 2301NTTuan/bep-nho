@@ -13,6 +13,7 @@ const mismatchedSlug = `phase14c2-mismatch-${runId}`;
 const prisma = new PrismaClient();
 
 function monday() { const now = new Date(); const day = now.getUTCDay() || 7; return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day + 1)).toISOString().slice(0, 10); }
+function addDays(value: string, days: number) { return new Date(new Date(`${value}T00:00:00.000Z`).getTime() + days * 86_400_000).toISOString().slice(0, 10); }
 async function expectAccessible(page: Page) {
   const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   expect(result.violations.filter((item) => item.impact === 'serious' || item.impact === 'critical'), JSON.stringify(result.violations, null, 2)).toEqual([]);
@@ -86,5 +87,24 @@ test('household shopping list previews, saves immutable snapshots, and recovers 
   await prisma.householdPantryItem.updateMany({ where: { householdId: membership.householdId, ingredientId: { in: [matched.id, mismatched.id] } }, data: { quantity: 500, unit: 'g', revision: { increment: 1 } } });
   await page.getByRole('button', { name: 'Xem lại theo kế hoạch và kho hiện tại' }).click();
   await expect(page.getByText('Kho bếp đã đủ nguyên liệu cho kế hoạch tuần này.')).toBeVisible(); await expectAccessible(page);
+
+  const nextWeek = addDays(monday(), 7);
+  await prisma.householdMealPlan.create({ data: { householdId: membership.householdId, weekStart: new Date(`${nextWeek}T00:00:00.000Z`), createdByUserId: credential.userId } });
+  let releasePreview!: () => void;
+  let previewStarted!: () => void;
+  const previewBarrier = new Promise<void>((resolve) => { releasePreview = resolve; });
+  const previewRequest = new Promise<void>((resolve) => { previewStarted = resolve; });
+  await page.route(`**/v1/me/household/meal-plans/${monday()}/shopping-requirements`, async (route) => {
+    previewStarted();
+    await previewBarrier;
+    await route.continue();
+  });
+  await page.getByRole('button', { name: 'Xem nguyên liệu cần mua' }).click();
+  await previewRequest;
+  await page.getByRole('button', { name: 'Tuần sau →' }).click();
+  await expect(page).toHaveURL(new RegExp(`week=${nextWeek}`));
+  await expect(page.getByRole('heading', { name: 'Kiểm tra theo kế hoạch và kho bếp' })).toBeVisible();
+  releasePreview();
+  await expect(page.getByRole('heading', { name: 'Nguyên liệu cần mua' })).toHaveCount(0);
   expect(recipe.versions).toHaveLength(1); expect(monday()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 });

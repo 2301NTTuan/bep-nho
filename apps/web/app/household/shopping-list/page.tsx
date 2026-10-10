@@ -93,6 +93,7 @@ function ShoppingListContent() {
   const [noHousehold, setNoHousehold] = useState(false);
   const [stale, setStale] = useState(false);
   const loadGeneration = useRef(0);
+  const weekRef = useRef(weekStart);
 
   const currentWeek = useMemo(() => iso(mondayFor(new Date())), []);
 
@@ -130,58 +131,65 @@ function ShoppingListContent() {
 
   useEffect(() => { void load(); }, [weekStart]);
   useEffect(() => {
-    if (isMonday(requestedWeek) && requestedWeek !== weekStart) selectWeek(requestedWeek!);
-  // Query navigation is an external input; selectWeek intentionally clears transient state.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedWeek]);
+    const nextWeek = isMonday(requestedWeek) ? requestedWeek! : currentWeek;
+    if (nextWeek !== weekRef.current) {
+      weekRef.current = nextWeek;
+      setWeekStart(nextWeek);
+    }
+    if (requestedWeek !== nextWeek) router.replace(`/household/shopping-list?week=${nextWeek}`, { scroll: false });
+  }, [currentWeek, requestedWeek, router]);
 
   function selectWeek(nextWeek: string) {
-    const same = nextWeek === weekStart;
+    if (nextWeek === weekRef.current) { void load(nextWeek); return; }
     loadGeneration.current += 1;
-    setWeekStart(nextWeek); setHasPlan(false); setSavedList(null); setPreview(null); setStale(false); setError(''); setNotice('');
+    setLoading(true); setBusy(false); setHasPlan(false); setSavedList(null); setPreview(null); setStale(false); setError(''); setNotice('');
     router.replace(`/household/shopping-list?week=${nextWeek}`, { scroll: false });
-    if (same) void load(nextWeek);
   }
 
   async function previewRequirements() {
     if (!hasPlan) return;
+    const requestWeek = weekStart;
+    const generation = loadGeneration.current;
     setBusy(true); setError(''); setNotice(''); setStale(false);
     try {
-      const response = await apiRequest<{ data: Preview }>(`/me/household/meal-plans/${weekStart}/shopping-requirements`);
+      const response = await apiRequest<{ data: Preview }>(`/me/household/meal-plans/${requestWeek}/shopping-requirements`);
+      if (generation !== loadGeneration.current || requestWeek !== weekRef.current) return;
       setPreview(response.data);
     } catch (cause) {
-      if (cause instanceof ApiRequestError && cause.status === 404) { setPreview(null); await load(); }
+      if (generation !== loadGeneration.current || requestWeek !== weekRef.current) return;
+      if (cause instanceof ApiRequestError && cause.status === 404) { setPreview(null); await load(requestWeek); }
       else setError(getErrorMessage(cause, 'Chưa thể xem nguyên liệu cần mua.'));
-    } finally { setBusy(false); }
+    } finally {
+      if (generation === loadGeneration.current && requestWeek === weekRef.current) setBusy(false);
+    }
   }
 
   async function generate() {
     if (!preview) return;
+    const requestWeek = weekStart;
+    const generation = loadGeneration.current;
+    const expectedInputHash = preview.inputHash;
     setBusy(true); setError('');
     try {
-      const response = await apiRequest<{ data: { shoppingList: SavedList | null; reused: boolean } }>(`/me/household/meal-plans/${weekStart}/shopping-list`, {
-        method: 'POST', body: JSON.stringify({ expectedInputHash: preview.inputHash }),
+      const response = await apiRequest<{ data: { shoppingList: SavedList | null; reused: boolean } }>(`/me/household/meal-plans/${requestWeek}/shopping-list`, {
+        method: 'POST', body: JSON.stringify({ expectedInputHash }),
       });
+      if (generation !== loadGeneration.current || requestWeek !== weekRef.current) return;
       setPreview(null);
       if (response.data.shoppingList) {
         setSavedList(response.data.shoppingList);
         setNotice(response.data.reused ? 'Danh sách hiện tại vẫn đúng với kế hoạch và kho bếp.' : 'Đã lưu danh sách đi chợ.');
-        void loadLatest();
       } else setNotice('Kho bếp đã đủ nguyên liệu cho kế hoạch tuần này. Không cần lưu danh sách đi chợ.');
     } catch (cause) {
+      if (generation !== loadGeneration.current || requestWeek !== weekRef.current) return;
       if (cause instanceof ApiRequestError && cause.status === 409) {
         setPreview(null); setStale(true); setNotice('');
-        await load();
-        setStale(true);
+        await load(requestWeek);
+        if (requestWeek === weekRef.current) setStale(true);
       } else setError(getErrorMessage(cause, 'Chưa thể lưu danh sách đi chợ.'));
-    } finally { setBusy(false); }
-  }
-
-  async function loadLatest() {
-    try {
-      const response = await apiRequest<{ data: { shoppingList: SavedList } }>(`/me/household/meal-plans/${weekStart}/shopping-list/latest`);
-      setSavedList(response.data.shoppingList);
-    } catch { /* A just-created list is already displayed; normal navigation will retry. */ }
+    } finally {
+      if (requestWeek === weekRef.current) setBusy(false);
+    }
   }
 
   if (loading) return <main className="shell householdShell"><div className="stateCard">Đang tải danh sách đi chợ…</div></main>;

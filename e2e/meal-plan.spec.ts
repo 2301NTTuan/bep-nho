@@ -54,6 +54,16 @@ test('household meal planner supports manual planning, preview, stale recovery, 
   await expect(page.getByText('Chủ động sắp xếp bữa ăn')).toBeVisible();
 
   await page.getByRole('button', { name: '+ Thêm bữa ăn' }).first().click();
+  await expect(page.getByRole('heading', { name: 'Thêm bữa ăn' })).toBeVisible();
+  await page.getByRole('button', { name: '← Tuần trước' }).click();
+  await expect(page.getByRole('heading', { name: 'Tuần này chưa có kế hoạch' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Thêm bữa ăn' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Tuần sau →' }).click();
+  await expect(page.getByText('Chủ động sắp xếp bữa ăn')).toBeVisible();
+  await page.getByRole('button', { name: 'Về tuần hiện tại' }).click();
+  await expect(page.getByText('Chủ động sắp xếp bữa ăn')).toBeVisible();
+
+  await page.getByRole('button', { name: '+ Thêm bữa ăn' }).first().click();
   await page.getByLabel('Công thức').selectOption({ index: 1 });
   await page.getByLabel('Số phần').fill('3');
   await page.getByLabel('Ghi chú (không bắt buộc)').fill('Bữa cơm đầu tuần');
@@ -76,7 +86,11 @@ test('household meal planner supports manual planning, preview, stale recovery, 
 
   const weekStart = currentMonday();
   const recipe = await prisma.recipe.findFirstOrThrow({ where: { status: 'published', versions: { some: { publishedAt: { not: null } } } }, include: { versions: { where: { publishedAt: { not: null } }, orderBy: { versionNo: 'desc' }, take: 1 } } });
-  const plan = await prisma.householdMealPlan.findFirstOrThrow({ where: { weekStart: new Date(`${weekStart}T00:00:00.000Z`) }, orderBy: { createdAt: 'desc' } });
+  const credential = await prisma.userCredential.findUniqueOrThrow({ where: { normalizedEmail: email } });
+  const membership = await prisma.householdMember.findUniqueOrThrow({ where: { userId: credential.userId } });
+  const plan = await prisma.householdMealPlan.findUniqueOrThrow({
+    where: { householdId_weekStart: { householdId: membership.householdId, weekStart: new Date(`${weekStart}T00:00:00.000Z`) } },
+  });
   await prisma.householdMealPlanEntry.create({ data: { mealPlanId: plan.id, plannedDate: new Date(`${weekStart}T00:00:00.000Z`), mealType: 'lunch', recipeId: recipe.id, recipeVersionId: recipe.versions[0].id, servings: 4 } });
   await page.getByRole('button', { name: 'Áp dụng gợi ý' }).click();
   await expect(page.getByText('Kế hoạch hoặc Family Taste đã thay đổi. Hãy xem lại gợi ý mới.')).toBeVisible();

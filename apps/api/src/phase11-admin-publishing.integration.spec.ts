@@ -409,6 +409,17 @@ describe('Phase 11 admin publishing workflow (HTTP integration)', () => {
     expect(feedbackResponse.status).toBe(201);
     const feedbackId = (await json<{ data: { feedback: { id: string } } }>(feedbackResponse)).data.feedback.id;
     const versionCount = await prisma.recipeVersion.count({ where: { recipeId } });
+    const latestPublished = await prisma.recipeVersion.findFirstOrThrow({
+      where: { recipeId, publishedAt: { not: null } }, orderBy: { versionNo: 'desc' }, select: { id: true },
+    });
+    const publicList = await json<{ data: Array<{ id: string; latestVersion: Record<string, unknown> }> }>(
+      await request('/recipes?limit=100'),
+    );
+    const publicRecipe = publicList.data.find((item) => item.id === recipeId)!;
+    expect(publicRecipe.latestVersion.id).toBe(latestPublished.id);
+    expect(Object.keys(publicRecipe.latestVersion).sort()).toEqual([
+      'cookTimeMinutes', 'heroMedia', 'id', 'prepTimeMinutes', 'publishedAt', 'servings', 'summary', 'versionNo',
+    ]);
 
     expect((await request(`/admin/recipes/${recipeId}/archive`, { method: 'POST', cookie: adminCookie })).status).toBe(201);
     expect((await request(`/recipes/${slug}`)).status).toBe(404);

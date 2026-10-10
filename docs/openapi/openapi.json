@@ -280,6 +280,153 @@
         ],
         "type": "object"
       },
+      "RecipeHeroMediaResponseDto": {
+        "properties": {
+          "alt": {
+            "nullable": true,
+            "type": "string"
+          },
+          "height": {
+            "nullable": true,
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "width": {
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "alt",
+          "width",
+          "height"
+        ],
+        "type": "object"
+      },
+      "RecipeListItemResponseDto": {
+        "properties": {
+          "cuisine": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "latestVersion": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RecipeListVersionResponseDto"
+              }
+            ],
+            "nullable": true
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "cuisine",
+          "latestVersion"
+        ],
+        "type": "object"
+      },
+      "RecipeListMetaResponseDto": {
+        "properties": {
+          "count": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "type": "object"
+      },
+      "RecipeListResponseDto": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/RecipeListItemResponseDto"
+            },
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/RecipeListMetaResponseDto"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "type": "object"
+      },
+      "RecipeListVersionResponseDto": {
+        "properties": {
+          "cookTimeMinutes": {
+            "nullable": true,
+            "type": "number"
+          },
+          "heroMedia": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RecipeHeroMediaResponseDto"
+              }
+            ],
+            "nullable": true
+          },
+          "id": {
+            "description": "Exact latest published canonical version identifier.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "prepTimeMinutes": {
+            "nullable": true,
+            "type": "number"
+          },
+          "publishedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "servings": {
+            "minimum": 1,
+            "type": "number"
+          },
+          "summary": {
+            "nullable": true,
+            "type": "string"
+          },
+          "versionNo": {
+            "minimum": 1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "versionNo",
+          "servings",
+          "prepTimeMinutes",
+          "cookTimeMinutes",
+          "summary",
+          "publishedAt",
+          "heroMedia"
+        ],
+        "type": "object"
+      },
       "RegisterDto": {
         "properties": {
           "email": {
@@ -10568,7 +10715,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "Published recipe summaries."
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipeListResponseDto"
+                }
+              }
+            },
+            "description": "Published recipe summaries with the exact latest published version ID."
           }
         },
         "summary": "List published recipes.",

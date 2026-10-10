@@ -207,6 +207,13 @@ describe('Phase 13A household meal planning (HTTP integration)', () => {
       method: 'POST', cookie: foreignOwner.cookie, body: JSON.stringify({ weekStart: '2026-10-19' }),
     })).status).toBe(201);
     expect((await request('/me/household/meal-plans/2026-10-19', { cookie: owner.cookie })).status).toBe(404);
+
+    const sameSlot = entryBody({ plannedDate: '2026-10-18', mealType: 'dinner' });
+    const racedEntries = await Promise.all([
+      request(`/me/household/meal-plans/${WEEK}/entries`, { method: 'POST', cookie: owner.cookie, body: JSON.stringify(sameSlot) }),
+      request(`/me/household/meal-plans/${WEEK}/entries`, { method: 'POST', cookie: member.cookie, body: JSON.stringify(sameSlot) }),
+    ]);
+    expect(racedEntries.map((response) => response.status).sort()).toEqual([201, 409]);
   });
 
   it('enforces dates, slot conflicts, and canonical/family provenance', async () => {

@@ -18,12 +18,15 @@ describe('Phase 13A meal-plan calendar rules', () => {
     expect(isDateInMealPlanWeek('2026-10-12', '2026-10-18')).toBe(true);
     expect(isDateInMealPlanWeek('2026-10-12', '2026-10-11')).toBe(false);
     expect(isDateInMealPlanWeek('2026-10-12', '2026-10-19')).toBe(false);
+    expect(isDateInMealPlanWeek('2026-12-28', '2027-01-03')).toBe(true);
+    expect(isDateInMealPlanWeek('2026-12-28', '2027-01-04')).toBe(false);
+    expect(isDateInMealPlanWeek('2026-08-31', '2026-09-06')).toBe(true);
   });
 
   it('does not depend on the process local timezone', () => {
     const original = process.env.TZ;
     try {
-      const results = ['Pacific/Kiritimati', 'America/Los_Angeles', 'UTC'].map((timezone) => {
+      const results = ['Asia/Ho_Chi_Minh', 'Etc/GMT+12', 'Pacific/Kiritimati', 'UTC'].map((timezone) => {
         process.env.TZ = timezone;
         return [
           validateMondayWeekStart('2026-10-12').getTime(),

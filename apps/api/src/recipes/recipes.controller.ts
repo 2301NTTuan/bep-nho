@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ListRecipesQuery } from './dto/list-recipes.query';
+import { RecipeListResponseDto } from './dto/recipe-list-response.dto';
 import { RecipesService } from './recipes.service';
 
 @ApiTags('Recipes')
@@ -18,7 +19,7 @@ export class RecipesController {
 
   @Get()
   @ApiOperation({ summary: 'List published recipes.' })
-  @ApiResponse({ status: 200, description: 'Published recipe summaries.' })
+  @ApiResponse({ status: 200, description: 'Published recipe summaries with the exact latest published version ID.', type: RecipeListResponseDto })
   list(
     @Query()
     query: ListRecipesQuery,

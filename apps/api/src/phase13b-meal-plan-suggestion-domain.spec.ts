@@ -45,6 +45,21 @@ describe('family-meal-plan-v1 deterministic selection', () => {
     const four = select([...slots, { plannedDate: '2026-10-14', mealType: 'lunch' }]);
     expect(new Set(four.slice(0, 3).map((selection) => selection.recipeId)).size).toBe(3);
     expect(new Set(four.map((selection) => selection.recipeId)).size).toBe(3);
+
+    const thirteen = Array.from({ length: 13 }, (_, index) => ({
+      recipeId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+      recentUseCount: 0,
+    }));
+    const fourteenSlots = Array.from({ length: 14 }, (_, index) => ({
+      plannedDate: `2026-10-${String(12 + Math.floor(index / 2)).padStart(2, '0')}`,
+      mealType: index % 2 === 0 ? 'lunch' as const : 'dinner' as const,
+    }));
+    const fourteen = selectFamilyMealPlanRecipes({
+      householdId, weekStart, slots: fourteenSlots, candidates: thirteen,
+      currentWeekEntries: [], tieBreak,
+    });
+    expect(new Set(fourteen.slice(0, 13).map((selection) => selection.recipeId)).size).toBe(13);
+    expect(new Set(fourteen.map((selection) => selection.recipeId)).size).toBe(13);
   });
 
   it('deprioritizes a recipe already present this week', () => {

@@ -199,6 +199,7 @@ For a bad database migration, prefer a reviewed forward-fix migration. If incide
 - **Household invite rejected:** verify the household is active, below eight members, the user has no membership, and the token is unused/unexpired. Never inspect or log the raw token or stored hash.
 - **Family version blocked:** verify current membership and recipe `published` status. Generation takes the recipe lock before the household lock; do not introduce the reverse order in another transaction.
 - **Owner account deletion:** account deletion takes the account lifecycle lock before the household lock, then promotes the deterministic oldest remaining member or closes an empty household. Do not manually delete shared household-version history.
+- **Phase 12 CI:** the browser job uses a dedicated Redis rate-limit prefix and high test-only points so the five disposable E2E flows do not consume the production-style registration bucket; integration still exercises the real bounded rate-limit behavior.
 
 ## Prohibited shortcuts
 

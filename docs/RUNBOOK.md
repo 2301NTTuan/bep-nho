@@ -122,6 +122,20 @@ pnpm sessions:cleanup -- --retention-days=30 --execute
 
 The command deletes only sessions expired before the cutoff or revoked before the cutoff. Schedule it externally (for example daily); do not add an in-process scheduler to every API replica.
 
+## Household meal planning
+
+Meal plans use PostgreSQL `DATE` semantics with canonical `YYYY-MM-DD` API values and Monday week starts. Never convert these fields through server-local timestamps. A failed create or mutation should be classified before retrying:
+
+- 400 indicates an invalid Monday/date/slot/source shape;
+- 404 indicates no current household membership, no plan for that week, or a foreign resource under owner-scoped semantics;
+- 409 indicates an occupied single-entry slot, archived/unavailable recipe, or stale suggestion preview.
+
+Suggestion preview may create deduplicated immutable Family Taste versions but never plan entries. Apply recomputes the full deterministic state and inserts all entries or none. A 409 must prompt a new preview; never replay with a fabricated hash or overwrite a member's manual change. Selection uses plan history only. Do not describe it operationally or in product copy as Taste-based dish preference ranking.
+
+All recipe-aware planning paths acquire sorted recipe publication locks before the household lock and plan mutation. Preserve that order when diagnosing or extending code. Historical archived entries are expected to remain readable. Account deletion nulls creator provenance and leaves the shared plan with the household.
+
+For a smoke test, create a household and weekly plan, add/edit/delete one canonical entry, preview at least two empty lunch/dinner slots, verify the plan is unchanged before apply, then apply and reload. Use disposable users and delete meal-plan entries/plans before household family versions during cleanup. See `docs/MEAL_PLANNING.md` for the exact ranking, hash, authorization, and UX contract.
+
 ## Dependency review
 
 Pull requests run GitHub's dependency review at high severity. Before a release, also run `pnpm audit --prod --audit-level high` and record any exception rather than silently weakening the threshold.
@@ -200,6 +214,7 @@ For a bad database migration, prefer a reviewed forward-fix migration. If incide
 - **Family version blocked:** verify current membership and recipe `published` status. Generation takes the recipe lock before the household lock; do not introduce the reverse order in another transaction.
 - **Owner account deletion:** account deletion takes the account lifecycle lock before the household lock, then promotes the deterministic oldest remaining member or closes an empty household. Do not manually delete shared household-version history.
 - **Phase 12 CI:** the browser job uses a dedicated Redis rate-limit prefix and high test-only points so the five disposable E2E flows do not consume the production-style registration bucket; integration still exercises the real bounded rate-limit behavior.
+- **Meal-plan apply 409:** reload the selected week and preview again. Check occupied lunch/dinner slots, current membership, recipe publication/latest versions, and effective Family Taste changes. Do not retry the stale hash automatically.
 
 ## Prohibited shortcuts
 

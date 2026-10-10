@@ -1,6 +1,6 @@
 # Bếp Nhớ MVP review
 
-Date: 2026-10-09
+Date: 2026-10-10
 
 ## Current MVP readiness
 
@@ -24,6 +24,7 @@ The web experience now presents this loop coherently on desktop and mobile, and 
 - Users can now explicitly accept, reject, or bounded-edit adjusted ingredients, and can pin one immutable “My Best Version” per recipe. Broader version-library comparison and bulk review remain future UX work.
 - Taste DNA now has a private history/control screen with deterministic explanations, manual overrides, and per-dimension reset. Cross-device live refresh and export are not included.
 - The web now has login/register/logout, account settings, verification, forgot/reset password, session revocation, and destructive deletion confirmation while keeping public recipe browsing available signed out. Cookie/Origin behavior and Redis-backed auth lifecycle abuse controls are verified; a real SMTP sender, production ingress, secret store, TLS/cookie domain, monitoring, and deployment remain environment work.
+- Households now have a durable Monday-based weekly planner, current-member manual CRUD, deterministic lunch/dinner suggestions, exact Family Taste cooking versions, atomic stale-safe apply, and a responsive accessible planner. Pantry, shopping lists, nutrition scoring, substitution, recurring plans, and realtime collaboration remain later product work.
 
 ## Architectural debt and operational gaps
 
@@ -57,7 +58,7 @@ Completed 2026-10-09: deterministic OpenAPI generation/drift checks, production-
 
 Completed 2026-10-09: hash-only expiring email-verification/password-reset tokens, enumeration-safe public requests, SMTP abstraction plus a keyed test/dev-only memory outbox, reset-all/change-other session policies, owner-scoped session management, transactional password-confirmed account deletion, account/recovery UI, OpenAPI, PostgreSQL integration coverage, and focused Playwright/axe flows. Phase 10.1 additionally serializes login, registration, and dev-session creation against reset/change/delete; rejects unusable production SMTP configuration at startup; and requires a constant-time-compared outbox header. Implementation run #22 was green on exact SHA `595a4f313293d4d0316ee85fa96d03b494b5fe2e`. A real SMTP provider and production infrastructure remain deployment prerequisites.
 
-Do not begin Phase 11, social, pantry, household, meal-planning, or monetization domains automatically.
+Phases 11–13 are complete through controlled editorial publishing, Household/Family Taste, and weekly meal planning. Do not begin Phase 14, pantry, shopping, social, or monetization work automatically.
 
 ## Phase 5.5 hardening completed
 
@@ -138,3 +139,13 @@ Do not begin Phase 11, social, pantry, household, meal-planning, or monetization
 The controlled alpha now supports one household per user, up to eight active members, owner/member permissions, manually shared one-time invitation links, an aggregate-only Family Taste view, immutable household recipe suggestions, and exact household-version CookSessions. Personal feedback remains owned by the cook and updates only personal Taste DNA. Multiple households, invitation email, role-transfer UI, household overrides/weights, allergy or medical safety, and Family Best Version remain out of scope.
 
 The additive migration count is 11 and Prisma remains 6.19.3. Local verification passed a clean 11-migration deploy, twice-idempotent 13-recipe seed, typecheck 6/6, API 85/85, build 6/6, deterministic OpenAPI, and Playwright/axe 5/5. GitHub Actions run #28 passed `static`, `integration`, and `e2e` after the E2E-only rate-limit namespace fix; the final documentation follow-up is monitored separately.
+
+## Phase 13 household meal planning
+
+Phase 13 adds one Monday `DATE` plan per household/week, constrained dated entries, current-membership authorization, explicit canonical/household-version provenance, archive-safe history, and account-deletion-safe creator provenance. Manual planning supports Sáng, Trưa, Tối, and Khác with one breakfast/lunch/dinner entry per day and ordered multiple `other` entries.
+
+`family-meal-plan-v1` fills only requested empty lunch/dinner slots. Selection is deterministic and lexicographically prioritizes unused recipes, lower occurrence count in the previous four plan weeks, non-adjacent repetition, then a stable SHA-256 tie-break. Taste does not rank dish preference; current aggregate Family Taste is applied only through unchanged `family-personalize-v1` after dish selection. Preview is plan-read-only, while hash-guarded apply recomputes under sorted recipe locks then the household lock and inserts all entries or none.
+
+The `/household/meal-plan` web route provides responsive seven-day navigation, authoritative manual CRUD, explicit suggestion selection/review, and stale-preview recovery without overwrite. Migration `20261010190000_household_meal_planning_core` is migration #12; Prisma remains 6.19.3. Pantry and shopping lists are not implemented. See `docs/MEAL_PLANNING.md` for the final contract and invariants.
+
+Final local verification passed a clean 12-migration disposable deploy, twice-idempotent 13-recipe/27-rule seed, typecheck and build 6/6, Turbo tests 8/8 with API 105/105, deterministic OpenAPI, and Playwright/axe 6/6. The exact final remote run is reported with the release result rather than generating another documentation-only CI cycle.

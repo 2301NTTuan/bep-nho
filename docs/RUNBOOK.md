@@ -136,6 +136,16 @@ All recipe-aware planning paths acquire sorted recipe publication locks before t
 
 For a smoke test, create a household and weekly plan, add/edit/delete one canonical entry, preview at least two empty lunch/dinner slots, verify the plan is unchanged before apply, then apply and reload. Use disposable users and delete meal-plan entries/plans before household family versions during cleanup. See `docs/MEAL_PLANNING.md` for the exact ranking, hash, authorization, and UX contract.
 
+## Household pantry and shopping lists
+
+Pantry rows are shared household state maintained manually through `/household/pantry`. Quantity is an absolute positive `Decimal(12,3)` value, the unit is explicit text, and best-before values are PostgreSQL `DATE` values represented as `YYYY-MM-DD`. Update and delete require the last-read positive revision. A 409 means another member changed the row; reload and let the user review the current value rather than retrying automatically. Pantry operations never reserve or consume stock after cooking.
+
+Shopping requirements for `/household/shopping-list` come from the exact immutable recipe source already stored on each weekly meal-plan entry. The service applies the shared Cook scaling rules, groups by canonical Ingredient ID plus exact trimmed unit, and subtracts pantry once only for the same exact unit. It performs no conversion or alias matching: `1 kg` does not reduce `500 g`, and `1 tbsp` does not reduce `15 ml`.
+
+Preview is read-only. Generation accepts only the latest preview `inputHash`, recomputes under the household lock, and returns 409 if the relevant plan or pantry state changed. Reload and preview again; never fabricate quantities or hashes. Saved lists are immutable historical snapshots and do not stay synchronized with later plan/pantry edits. No purchased/checked state exists. See `docs/SHOPPING_LIST.md` for hash, provenance, aggregation, versioning, privacy, and cleanup details.
+
+For disposable household cleanup, remove shopping-list items, shopping lists, pantry rows, meal-plan entries, meal plans, household personalized versions, invites/members, then the household. Shopping generation never acquires recipe publication locks; preserve the global recipe-lock-before-household-lock rule in recipe-aware operations.
+
 ## Dependency review
 
 Pull requests run GitHub's dependency review at high severity. Before a release, also run `pnpm audit --prod --audit-level high` and record any exception rather than silently weakening the threshold.
@@ -215,6 +225,8 @@ For a bad database migration, prefer a reviewed forward-fix migration. If incide
 - **Owner account deletion:** account deletion takes the account lifecycle lock before the household lock, then promotes the deterministic oldest remaining member or closes an empty household. Do not manually delete shared household-version history.
 - **Phase 12 CI:** the browser job uses a dedicated Redis rate-limit prefix and high test-only points so the five disposable E2E flows do not consume the production-style registration bucket; integration still exercises the real bounded rate-limit behavior.
 - **Meal-plan apply 409:** reload the selected week and preview again. Check occupied lunch/dinner slots, current membership, recipe publication/latest versions, and effective Family Taste changes. Do not retry the stale hash automatically.
+- **Pantry update/delete 409:** another member changed the item revision. Reload the authoritative pantry and require a fresh user edit; do not resubmit with a silently replaced revision.
+- **Shopping generation 409:** the meal plan or relevant pantry input changed after preview. Discard the old preview/hash, reload the selected week, and preview again. Saved historical snapshots remain unchanged.
 
 ## Prohibited shortcuts
 

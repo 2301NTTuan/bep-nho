@@ -1,6 +1,6 @@
 # Household shopping requirements
 
-Phase 14C1 provides the deterministic backend core for a household weekly shopping list. It does not include the shopping web UI, checked/purchased state, pantry consumption, or unit conversion.
+Phase 14 provides deterministic household weekly shopping requirements, immutable saved snapshots, and the `/household/shopping-list` web experience. It does not include checked/purchased state, pantry consumption, or unit conversion.
 
 ## Calculation pipeline
 
@@ -36,4 +36,10 @@ Generation lock order is household advisory lock, membership recheck, exact plan
 
 Removed members immediately lose preview, generation, and read access. Historical creator IDs never grant access. User deletion sets shopping-list creator provenance to null and preserves shared lists. API output omits user IDs, pantry notes, Taste evidence, feedback, and internal lock identifiers.
 
-Generation is read-only with respect to meal plans, pantry, Taste, CookSessions, Family Taste, and recipe versions. Later Phase 14C2 work may add the shopping web experience; it must retain these exact calculation and stale-preview boundaries.
+Generation is read-only with respect to meal plans, pantry, Taste, CookSessions, Family Taste, and recipe versions. The web experience retains these exact calculation and stale-preview boundaries.
+
+## Web behavior
+
+The authenticated page uses canonical Monday `week=YYYY-MM-DD` navigation, loads the latest saved snapshot for that household/week, and directs a missing-plan state back to meal planning. Preview shows requirement, missing, fully covered, and unit-mismatch counts plus exact quantities. It states that exact units are required and that saving does not change pantry inventory.
+
+The preview hash exists only in active component state. Saving sends that hash and then displays the server-returned immutable snapshot. A stale 409 clears the preview and requires an explicit new preview; it never retries automatically. Week navigation invalidates in-flight load, preview, and generation responses, so a response for week A cannot populate week B. Returning later reads the latest saved snapshot; historical versions remain immutable.

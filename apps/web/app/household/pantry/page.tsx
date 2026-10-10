@@ -20,7 +20,7 @@ function validQuantity(value: string) {
 }
 
 function displayDate(value: string) {
-  return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })
     .format(new Date(`${value}T00:00:00.000Z`));
 }
 

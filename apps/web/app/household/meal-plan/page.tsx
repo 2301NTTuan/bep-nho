@@ -28,7 +28,10 @@ const MS_DAY = 86_400_000;
 function iso(date: Date) { return date.toISOString().slice(0, 10); }
 function mondayFor(value: Date) { const day = value.getUTCDay() || 7; return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate() - day + 1)); }
 function addDays(value: string, days: number) { return iso(new Date(new Date(`${value}T00:00:00.000Z`).getTime() + days * MS_DAY)); }
-function vietnameseDate(value: string) { return new Intl.DateTimeFormat('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit' }).format(new Date(`${value}T00:00:00.000Z`)); }
+function vietnameseDate(value: string) {
+  return new Intl.DateTimeFormat('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', timeZone: 'UTC' })
+    .format(new Date(`${value}T00:00:00.000Z`));
+}
 function slotKey(slot: { plannedDate: string; mealType: string }) { return `${slot.plannedDate}|${slot.mealType}`; }
 function initialForm(weekStart: string) { return { plannedDate: weekStart, mealType: 'lunch' as MealType, recipeVersionId: '', servings: '4', note: '' }; }
 

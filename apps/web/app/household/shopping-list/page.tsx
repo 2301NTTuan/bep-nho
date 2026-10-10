@@ -56,7 +56,7 @@ function isMonday(value: string | null) {
   return !Number.isNaN(date.getTime()) && iso(date) === value && date.getUTCDay() === 1;
 }
 function vietnameseDate(value: string) {
-  return new Intl.DateTimeFormat('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit' })
+  return new Intl.DateTimeFormat('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', timeZone: 'UTC' })
     .format(new Date(`${value}T00:00:00.000Z`));
 }
 function displayDateTime(value: string) {

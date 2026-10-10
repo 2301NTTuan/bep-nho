@@ -97,6 +97,7 @@ export default function Home() {
         <nav className="topnav" aria-label="Điều hướng chính">
           <a href="#recipes">Món hôm nay</a>
           {currentUser && <Link href="/taste">Taste DNA</Link>}
+          {currentUser && <Link href="/household">Gia đình</Link>}
           {currentUser && <Link href="/account">Tài khoản</Link>}
           {currentUser ? (
             <button className="navAction" type="button" disabled={authBusy} onClick={() => void logout()}>Đăng xuất</button>
@@ -104,6 +105,20 @@ export default function Home() {
             <><Link href="/login">Đăng nhập</Link><Link href="/register" className="navAction">Tạo tài khoản</Link></>
           ) : null}
         </nav>
+        <details className="mobileNav">
+          <summary>Điều hướng</summary>
+          <nav aria-label="Điều hướng trên điện thoại">
+            <a href="#recipes">Món hôm nay</a>
+            {currentUser && <Link href="/taste">Taste DNA</Link>}
+            {currentUser && <Link href="/household">Gia đình</Link>}
+            {currentUser && <Link href="/account">Tài khoản</Link>}
+            {currentUser ? (
+              <button type="button" disabled={authBusy} onClick={() => void logout()}>Đăng xuất</button>
+            ) : authChecked ? (
+              <><Link href="/login">Đăng nhập</Link><Link href="/register">Tạo tài khoản</Link></>
+            ) : null}
+          </nav>
+        </details>
       </header>
 
       {currentUser?.user.email && !currentUser.user.emailVerified && (
